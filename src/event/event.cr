@@ -52,7 +52,7 @@ module Event
 
     private def to_timeval(time : Int)
       t :: LibC::TimeVal
-      t.tv_sec = time.to_i64
+      t.tv_sec = LibC::TimeT.cast(time)
       t.tv_usec = typeof(t.tv_usec).cast(0)
       t
     end
@@ -60,10 +60,10 @@ module Event
     private def to_timeval(time : Float)
       t :: LibC::TimeVal
 
-      seconds = time.to_i64
+      seconds = LibC::TimeT.cast(time)
       useconds = typeof(t.tv_usec).cast((time - seconds) * 1e6)
 
-      t.tv_sec = seconds.to_i64
+      t.tv_sec = seconds
       t.tv_usec = useconds
       t
     end

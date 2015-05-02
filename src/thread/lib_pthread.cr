@@ -1,3 +1,4 @@
+@[Link("pthread")]
 lib LibPThread
   type Thread = Void*
 

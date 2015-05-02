@@ -8,10 +8,16 @@ class FileDescriptorIO
   private getter! readers
   private getter! writers
 
-  def initialize(@fd, blocking = false)
+  def initialize(@fd, blocking = ifdef darwin || linux; false; elsif windows; true; end)
     unless blocking
-      before = LibC.fcntl(@fd, LibC::FCNTL::F_GETFL)
-      LibC.fcntl(@fd, LibC::FCNTL::F_SETFL, before | LibC::O_NONBLOCK)
+      ifdef darwin || linux
+        before = LibC.fcntl(@fd, LibC::FCNTL::F_GETFL)
+        LibC.fcntl(@fd, LibC::FCNTL::F_SETFL, before | LibC::O_NONBLOCK)
+      elsif windows
+        # make sockets non-blocking
+        argp = 1_u32
+        LibC.ioctlsocket(@fd, LibC::FIONBIO.to_i32, pointerof(argp))
+      end
       @event = Scheduler.create_fd_events(self)
       @readers = [] of Fiber
       @writers = [] of Fiber
@@ -85,6 +91,12 @@ class FileDescriptorIO
     @fd
   end
 
+  ifdef windows
+    def handle
+      LibC.get_osfhandle @fd
+    end
+  end
+
   def close
     if closed?
       raise IO::Error.new "closed stream"
@@ -112,7 +124,7 @@ class FileDescriptorIO
   end
 
   def tty?
-    LibC.isatty(fd) == 1
+    LibC.isatty(fd) != 1
   end
 
   def to_fd_io

@@ -6,7 +6,12 @@ class TCPSocket < IPSocket
       sock = LibC.socket(afamily(ai.family), ai.socktype, ai.protocol)
       raise Errno.new("Error opening socket") if sock <= 0
 
-      if LibC.connect(sock, ai.addr, ai.addrlen) != 0
+      ifdef darwin || linux
+        status = LibC.connect(sock, ai.addr, ai.addrlen)
+      elsif windows
+        status = LibC.connect(sock, ai.addr, ai.addrlen.to_i32)
+      end
+      if status != 0
         LibC.close(sock)
         next false if ai.next
         raise Errno.new("Error connecting to '#{host}:#{port}'")

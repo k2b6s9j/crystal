@@ -129,7 +129,7 @@ struct Char
   #
   # ```
   # 'l'.in_set? "lo"          #=> true
-  # 'l'.in_set? "lo", "o"     #=>  false
+  # 'l'.in_set? "lo", "o"     #=> false
   # 'l'.in_set? "hello", "^l" #=> false
   # 'l'.in_set? "j-m"         #=> true
   #

@@ -103,7 +103,7 @@ DIR  - directory where project will be generated,
       end
 
       def log_message
-        "      #{"create".colorize(:light_green)}  #{full_path}" 
+        "      #{"create".colorize(:light_green)}  #{full_path}"
       end
 
       def module_name
@@ -138,7 +138,7 @@ DIR  - directory where project will be generated,
       end
 
       def full_path
-        "#{config.dir}/.git"
+        "#{config.dir}#{File::SEPARATOR}.git"
       end
 
       private def command
@@ -146,13 +146,19 @@ DIR  - directory where project will be generated,
       end
     end
 
-    TEMPLATE_DIR = "#{__DIR__}/init/template"
+    TEMPLATE_DIR =
+      ifdef darwin || linux
+        "#{__DIR__}/init/template"
+      elsif windows
+        "#{__DIR__}\\init\\template"
+      end
 
     macro template(name, template_path, full_path)
       class {{name.id}} < View
-        ecr_file "{{TEMPLATE_DIR.id}}/{{template_path.id}}"
+        ecr_file {{ [TEMPLATE_DIR, template_path].join(File::SEPARATOR_STRING) }}
+
         def full_path
-          "#{config.dir}/#{{{full_path}}}"
+          "#{config.dir}#{File::SEPARATOR}#{{{full_path}}}"
         end
       end
 
@@ -165,11 +171,11 @@ DIR  - directory where project will be generated,
     template TravisView, "travis.yml.ecr", ".travis.yml"
     template ProjectileView, "projectfile.ecr", "Projectfile"
 
-    template SrcExampleView, "example.cr.ecr", "src/#{config.name}.cr"
-    template SrcVersionView, "version.cr.ecr", "src/#{config.name}/version.cr"
+    template SrcExampleView, "example.cr.ecr", "src#{File::SEPARATOR}#{config.name}.cr"
+    template SrcVersionView, "version.cr.ecr", "src#{File::SEPARATOR}#{config.name}#{File::SEPARATOR}version.cr"
 
-    template SpecHelperView, "spec_helper.cr.ecr", "spec/spec_helper.cr"
-    template SpecExampleView, "example_spec.cr.ecr", "spec/#{config.name}_spec.cr"
+    template SpecHelperView, "spec_helper.cr.ecr", "spec#{File::SEPARATOR}spec_helper.cr"
+    template SpecExampleView, "example_spec.cr.ecr", "spec#{File::SEPARATOR}#{config.name}_spec.cr"
 
     View.register(GitInitView)
   end

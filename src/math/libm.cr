@@ -61,18 +61,27 @@ lib LibM
   fun atan_f64 = atan(value : Float64) : Float64
   fun atanh_f32 = atanhf(value : Float32) : Float32
   fun atanh_f64 = atanh(value : Float64) : Float64
-  fun besselj0_f32 = j0f(value : Float32) : Float32
-  fun besselj0_f64 = j0(value : Float64) : Float64
-  fun besselj1_f32 = j1f(value : Float32) : Float32
-  fun besselj1_f64 = j1(value : Float64) : Float64
-  fun besselj_f32 = jnf(value1 : Int32, value2 : Float32) : Float32
-  fun besselj_f64 = jn(value1 : Int32, value2 : Float64) : Float64
-  fun bessely0_f32 = y0f(value : Float32) : Float32
-  fun bessely0_f64 = y0(value : Float64) : Float64
-  fun bessely1_f32 = y1f(value : Float32) : Float32
-  fun bessely1_f64 = y1(value : Float64) : Float64
-  fun bessely_f32 = ynf(value1 : Int32, value2 : Float32) : Float32
-  fun bessely_f64 = yn(value1 : Int32, value2 : Float64) : Float64
+  ifdef darwin || linux
+    fun besselj0_f32 = j0f(value : Float32) : Float32
+    fun besselj0_f64 = j0(value : Float64) : Float64
+    fun besselj1_f32 = j1f(value : Float32) : Float32
+    fun besselj1_f64 = j1(value : Float64) : Float64
+    fun besselj_f32 = jnf(value1 : Int32, value2 : Float32) : Float32
+    fun besselj_f64 = jn(value1 : Int32, value2 : Float64) : Float64
+    fun bessely0_f32 = y0f(value : Float32) : Float32
+    fun bessely0_f64 = y0(value : Float64) : Float64
+    fun bessely1_f32 = y1f(value : Float32) : Float32
+    fun bessely1_f64 = y1(value : Float64) : Float64
+    fun bessely_f32 = ynf(value1 : Int32, value2 : Float32) : Float32
+    fun bessely_f64 = yn(value1 : Int32, value2 : Float64) : Float64
+  elsif windows
+    fun besselj0_f64 = _j0(value : Float64) : Float64
+    fun besselj1_f64 = _j1(value : Float64) : Float64
+    fun besselj_f64 = _jn(value1 : Int32, value2 : Float64) : Float64
+    fun bessely0_f64 = _y0(value : Float64) : Float64
+    fun bessely1_f64 = _y1(value : Float64) : Float64
+    fun bessely_f64 = _yn(value1 : Int32, value2 : Float64) : Float64
+  end
   fun cbrt_f32 = cbrtf(value : Float32) : Float32
   fun cbrt_f64 = cbrt(value : Float64) : Float64
   fun cosh_f32 = coshf(value : Float32) : Float32

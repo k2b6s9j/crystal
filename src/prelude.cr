@@ -1,5 +1,8 @@
 require "intrinsics"
 require "libc"
+ifdef windows
+  require "win32"
+end
 require "macros"
 require "object"
 require "reference"

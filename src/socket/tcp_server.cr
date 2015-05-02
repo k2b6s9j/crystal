@@ -9,7 +9,12 @@ class TCPServer < TCPSocket
       optval = 1
       LibC.setsockopt(sock, LibC::SOL_SOCKET, LibC::SO_REUSEADDR, pointerof(optval) as Void*, sizeof(Int32))
 
-      if LibC.bind(sock, ai.addr as LibC::SockAddr*, ai.addrlen) != 0
+      ifdef darwin || linux
+        status = LibC.bind(sock, ai.addr as LibC::SockAddr*, ai.addrlen)
+      elsif windows
+        status = LibC.bind(sock, ai.addr as LibC::SockAddr*, ai.addrlen.to_i32)
+      end
+      if status != 0
         LibC.close(sock)
         next false if ai.next
         raise Errno.new("Error binding TCP server at #{host}#{port}")

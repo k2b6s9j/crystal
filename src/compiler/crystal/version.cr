@@ -1,7 +1,14 @@
 require "./config"
 
 def Crystal.version_string
-  build_date = {{ `date -u`.stringify.chomp }}
+  build_date =
+    ifdef darwin || linux
+      {{ `date -u`.stringify.chomp }}
+    elsif windows
+      # win32: TODO
+      build_date = "Fri May  1 17:59:04 UTC 2015"
+    end
+
   version = Crystal::Config::VERSION
   pieces = version.split("-")
   tag = pieces[0]? || "?"

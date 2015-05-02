@@ -12,6 +12,8 @@ lib LibGC
   fun enable = GC_enable
   fun disable = GC_disable
   fun set_handle_fork = GC_set_handle_fork(value : Int32)
+  fun set_warn_proc = GC_set_warn_proc(callback : Void*)
+  fun ignore_warn_proc = GC_ignore_warn_proc
 
   type Finalizer = Void*, Void* ->
   fun register_finalizer = GC_register_finalizer(obj : Void*, fn : Finalizer, cd : Void*, ofn : Finalizer*, ocd : Void**)
@@ -52,8 +54,14 @@ end
 
 module GC
   def self.init
-    LibGC.set_handle_fork(1)
+    ifdef darwin || linux
+      LibGC.set_handle_fork 1
+    end
     LibGC.init
+    ifdef windows && x86
+      # win32: TODO: x64
+      LibGC.set_warn_proc((->LibGC.ignore_warn_proc).pointer)
+    end
   end
 
   def self.collect

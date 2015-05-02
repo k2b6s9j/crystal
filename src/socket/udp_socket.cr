@@ -12,7 +12,12 @@ class UDPSocket < IPSocket
       optval = 1
       LibC.setsockopt(fd, LibC::SOL_SOCKET, LibC::SO_REUSEADDR, pointerof(optval) as Void*, sizeof(Int32))
 
-      if LibC.bind(fd, ai.addr, ai.addrlen) != 0
+      ifdef darwin || linux
+        status = LibC.bind(fd, ai.addr, ai.addrlen)
+      elsif windows
+        status = LibC.bind(fd, ai.addr, ai.addrlen.to_i32)
+      end
+      if status != 0
         next false if ai.next
         raise Errno.new("Error binding UDP socket at #{host}:#{port}")
       end
@@ -23,7 +28,12 @@ class UDPSocket < IPSocket
 
   def connect(host, port)
     getaddrinfo(host, port, nil, LibC::SOCK_DGRAM, LibC::IPPROTO_UDP) do |ai|
-      if LibC.connect(fd, ai.addr, ai.addrlen) != 0
+      ifdef darwin || linux
+        status = LibC.connect(fd, ai.addr, ai.addrlen)
+      elsif windows
+        status = LibC.connect(fd, ai.addr, ai.addrlen.to_i32)
+      end
+      if status != 0
         next false if ai.next
         raise Errno.new("Error connecting UDP socket at #{host}:#{port}")
       end

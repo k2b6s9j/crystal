@@ -1,8 +1,14 @@
 lib LibC
-  $environ : UInt8**
-  fun getenv(name : UInt8*) : UInt8*?
-  fun setenv(name : UInt8*, value : UInt8*, overwrite : Int32) : Int32
-  fun unsetenv(name : UInt8*) : Int32
+  ifdef darwin || linux
+    $environ : UInt8**
+    fun getenv(name : UInt8*) : UInt8*?
+    fun setenv(name : UInt8*, value : UInt8*, overwrite : Int32) : Int32
+    fun unsetenv(name : UInt8*) : Int32
+  elsif windows
+    $wenviron = _wenviron : UInt16**
+    fun wgetenv = _wgetenv(name : UInt16*) : UInt16*?
+    fun wputenv_s = _wputenv_s(name : UInt16*, value : UInt16*) : Int32
+  end
 end
 
 module ENV
@@ -16,21 +22,37 @@ module ENV
   end
 
   def self.[]?(key : String)
-    str = LibC.getenv key
+    ifdef darwin || linux
+      str = LibC.getenv(key)
+    elsif windows
+      str = LibC.wgetenv(key.to_utf16)
+    end
     str ? String.new(str) : nil
   end
 
   def self.[]=(key : String, value : String)
-    LibC.setenv key, value, 1
+    ifdef darwin || linux
+      LibC.setenv(key, value, 1)
+    elsif windows
+      LibC.wputenv_s(key.to_utf16, value.to_utf16)
+    end
   end
 
   def self.has_key?(key : String)
-    !!LibC.getenv(key)
+    ifdef darwin || linux
+      !!LibC.getenv(key)
+    elsif windows
+      !!LibC.wgetenv(key.to_utf16)
+    end
   end
 
   def self.delete(key : String)
     if value = self[key]?
-      LibC.unsetenv(key)
+      ifdef darwin || linux
+        LibC.unsetenv key
+      elsif windows
+        LibC.wputenv_s(key.to_utf16, "".to_utf16)
+      end
       value
     else
       nil
@@ -38,7 +60,11 @@ module ENV
   end
 
   def self.each
-    environ_ptr = LibC.environ
+    ifdef darwin || linux
+      environ_ptr = LibC.environ
+    elsif windows
+      environ_ptr = LibC.wenviron
+    end
     while environ_ptr
       environ_value = environ_ptr.value
       if environ_value

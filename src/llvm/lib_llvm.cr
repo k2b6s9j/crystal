@@ -1,7 +1,13 @@
 require "./enums"
 
 @[Link("stdc++")]
-@[Link(ldflags: "`(llvm-config-3.6 --libs --system-libs --ldflags 2> /dev/null) || (llvm-config-3.5 --libs --system-libs --ldflags 2> /dev/null) || (llvm-config --libs --system-libs --ldflags 2>/dev/null)`")]
+ifdef darwin || linux
+  @[Link(ldflags: "`(llvm-config-3.6 --libs --system-libs --ldflags 2> /dev/null) || (llvm-config-3.5 --libs --system-libs --ldflags 2> /dev/null) || (llvm-config --libs --system-libs --ldflags 2>/dev/null)`")]
+elsif windows
+  @[Link("z")]
+  @[Link("imagehlp")]
+  @[Link("llvm")]
+end
 lib LibLLVM
   type ContextRef = Void*
   type ModuleRef = Void*

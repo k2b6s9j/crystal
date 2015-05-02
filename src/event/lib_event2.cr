@@ -1,3 +1,4 @@
+@[Link("ws2_32")] ifdef windows
 @[Link("event")]
 lib LibEvent2
   type EventBase = Void*

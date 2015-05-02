@@ -213,20 +213,25 @@ module Crystal
         end
       end
 
+      # win32: what is this actually for?
+      # 1. it's flawed because it makes identifiers ambiguous
+      # 2. it doesn't seem to be necessary when using MinGW
+      # 3. shouldn't it rather check whether it's _compiling_
+      #    instead of _compiled_ for windows?
       # Windows only allows alphanumeric, dot, dollar and underscore
       # for mangled names.
-      ifdef windows
-        name = name.gsub do |char|
-          case char
-          when '<', '>', '(', ')', '*', ':', ',', '#', ' '
-            "."
-          when '+'
-            ".."
-          else
-            char
-          end
-        end
-      end
+      #ifdef windows
+      #  name = name.gsub do |char|
+      #    case char
+      #    when '<', '>', '(', ')', '*', ':', ',', '#', ' '
+      #      "."
+      #    when '+'
+      #      ".."
+      #    else
+      #      char
+      #    end
+      #  end
+      #end
 
       name
     end

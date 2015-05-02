@@ -43,25 +43,25 @@ class Crystal::Doc::Generator
       Markdown.parse body, MarkdownDocRenderer.new(program_type, io)
     end
 
-    write_template "#{@dir}/main.html", MainTemplate.new(body)
+    write_template "#{@dir}#{File::SEPARATOR}main.html", MainTemplate.new(body)
   end
 
   def copy_files
-    Dir.mkdir_p "#{@dir}/css"
-    write_template "#{@dir}/index.html", IndexTemplate.new
-    write_template "#{@dir}/css/style.css", StyleTemplate.new
+    Dir.mkdir_p "#{@dir}#{File::SEPARATOR}css"
+    write_template "#{@dir}#{File::SEPARATOR}index.html", IndexTemplate.new
+    write_template "#{@dir}#{File::SEPARATOR}css#{File::SEPARATOR}style.css", StyleTemplate.new
   end
 
   def generate_list(types)
-    write_template "#{@dir}/list.html", ListTemplate.new(types)
+    write_template "#{@dir}#{File::SEPARATOR}list.html", ListTemplate.new(types)
   end
 
   def generate_types_docs(types, dir)
     types.each do |type|
       if type.program?
-        filename = "#{dir}/toplevel.html"
+        filename = "#{dir}#{File::SEPARATOR}toplevel.html"
       else
-        filename = "#{dir}/#{type.name}.html"
+        filename = "#{dir}#{File::SEPARATOR}#{type.name}.html"
       end
 
       write_template filename, TypeTemplate.new(type)
@@ -70,7 +70,7 @@ class Crystal::Doc::Generator
 
       subtypes = type.types
       if subtypes && !subtypes.empty?
-        dirname = "#{dir}/#{type.name}"
+        dirname = "#{dir}#{File::SEPARATOR}#{type.name}"
         Dir.mkdir_p dirname
         generate_types_docs subtypes, dirname
       end

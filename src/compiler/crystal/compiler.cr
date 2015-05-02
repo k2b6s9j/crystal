@@ -38,12 +38,14 @@ module Crystal
     def initialize
       @debug = false
       @dump_ll = false
+      # TODO: keep it this way?
+      @link_flags = ENV["CRYSTAL_LINKER_FLAGS"]?
       @color = true
       @no_build = false
       @n_threads = 8.to_i32
       @prelude = "prelude"
       @release = false
-      @single_module = false
+      @single_module = ifdef darwin || linux; false; elsif windows; true; end
       @stats = false
       @verbose = false
       @wants_doc = false
@@ -123,7 +125,7 @@ module Crystal
     private def check_bc_flags_changed(output_dir)
       bc_flags_changed = true
       current_bc_flags = "#{@target_triple}|#{@mcpu}|#{@release}|#{@link_flags}"
-      bc_flags_filename = "#{output_dir}/bc_flags"
+      bc_flags_filename = "#{output_dir}#{File::SEPARATOR}bc_flags"
       if File.file?(bc_flags_filename)
         previous_bc_flags = File.read(bc_flags_filename).strip
         bc_flags_changed = previous_bc_flags != current_bc_flags
@@ -144,7 +146,11 @@ module Crystal
       if @cross_compile_flags
         output_dir = "."
       else
-        output_dir = ".crystal/#{sources.first.filename}"
+        ifdef darwin || linux
+          output_dir = ".crystal/#{sources.first.filename}"
+        elsif windows
+          output_dir = ".crystal\\#{sources.first.filename[3..-1]}"
+        end
       end
 
       Dir.mkdir_p(output_dir)
@@ -227,13 +233,13 @@ module Crystal
         jobs_count += 1
 
         if jobs_count >= @n_threads
-          LibC.waitpid(-1, out stat_loc, 0)
+          Process.waitpid -1
           jobs_count -= 1
         end
       end
 
       while jobs_count > 0
-        LibC.waitpid(-1, out stat_loc, 0)
+        Process.waitpid -1
         jobs_count -= 1
       end
     end
@@ -393,24 +399,25 @@ module Crystal
       end
 
       def object_name
-        "#{@output_dir}/#{@name}.o"
+        "#{@output_dir}#{File::SEPARATOR}#{@name}.o"
       end
 
       def bc_name
-        "#{@output_dir}/#{@name}.bc"
+        "#{@output_dir}#{File::SEPARATOR}#{@name}.bc"
       end
 
       def bc_name_new
-        "#{@output_dir}/#{@name}.new.bc"
+        "#{@output_dir}#{File::SEPARATOR}#{@name}.new.bc"
       end
 
       def ll_name
-        "#{@output_dir}/#{@name}.ll"
+        "#{@output_dir}#{File::SEPARATOR}#{@name}.ll"
       end
     end
   end
 
   def self.relative_filename(filename : String)
+    # win32: TODO
     dir = Dir.working_directory
     if filename.starts_with?(dir)
       filename = filename[dir.length .. -1]

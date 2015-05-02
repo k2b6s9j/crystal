@@ -118,7 +118,10 @@ CRYSTAL_DIR="$CRYSTAL_ROOT/.build"
 
 export CRYSTAL_PATH=$CRYSTAL_ROOT/src:libs
 
-if [ -x "$CRYSTAL_DIR/crystal" ]
+if [ "$(expr substr $(uname -s) 1 10)" == "MINGW32_NT" ];
+then
+  exec cmd //c "$SCRIPT_ROOT/crystal.bat" "$@"
+elif [ -x "$CRYSTAL_DIR/crystal" ]
 then
   echo -e "\x1B[33mUsing compiled compiler at .build/crystal\x1B[0m"
   exec "$CRYSTAL_DIR/crystal" "$@"

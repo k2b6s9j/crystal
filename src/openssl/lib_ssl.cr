@@ -1,5 +1,9 @@
 require "./lib_crypto"
 
+ifdef windows
+  @[Link("gdi32")]
+  @[Link("crypto")]
+end
 @[Link("ssl")]
 lib LibSSL
   type SSLMethod = Void*

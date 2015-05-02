@@ -1,6 +1,11 @@
 class Crystal::Program
   def flags
-    @flags ||= parse_flags(`uname -m -s`)
+    ifdef darwin || linux
+      @flags ||= parse_flags(`uname -m -s`)
+    elsif windows
+      # win32: TODO: default to host system
+      @flags ||= parse_flags("windows x86")
+    end
   end
 
   def flags=(flags)

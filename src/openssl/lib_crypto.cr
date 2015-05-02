@@ -1,3 +1,4 @@
+@[Link("gdi32")] ifdef windows
 @[Link("crypto")]
 lib LibCrypto
   struct Bio

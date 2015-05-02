@@ -3,10 +3,22 @@ lib LibC
   fun atoll(str : UInt8*) : Int64
   fun atof(str : UInt8*) : Float64
   fun strtof(str : UInt8*, endp : UInt8**) : Float32
-  fun strlen(s : UInt8*) : Int32
+  fun strlen(str : UInt8*) : Int32
   fun snprintf(str : UInt8*, n : Int32, format : UInt8*, ...) : Int32
   fun strtol(str : UInt8*, endptr : UInt8**, base : Int32) : Int32
   fun strtoull(str : UInt8*, endptr : UInt8**, base : Int32) : UInt64
+
+  fun wcstof(str : UInt16*, endp : UInt16**) : Float32
+  fun wcslen(str : UInt16*) : Int32
+  fun swprintf(str : UInt16*, format : UInt16*, ...) : Int32
+  fun wcstol(str : UInt16*, endptr : UInt16**, base : Int32) : Int32
+  fun wcstoull(str : UInt16*, endptr : UInt16**, base : Int32) : UInt64
+
+  ifdef windows
+    fun wtoi = _wtoi(str : UInt16*) : Int32
+    fun wtoll = _wtoi64(str : UInt16*) : Int64
+    fun wtof = _wtof(str : UInt16*) : Float64
+  end
 end
 
 class String
@@ -135,7 +147,11 @@ class String
   # "hello".to_i             #=> 0
   # ```
   def to_i
-    LibC.atoi cstr
+    ifdef darwin || linux
+      LibC.atoi cstr
+    elsif windows
+      LibC.wtoi to_utf16
+    end
   end
 
   # Returns the result of interpreting leading characters in this string as an integer base *base*
@@ -153,7 +169,11 @@ class String
   def to_i(base)
     raise "Invalid base #{base}" unless 2 <= base <= 36
 
-    LibC.strtol(cstr, nil, base)
+    ifdef darwin || linux
+      LibC.strtol(cstr, nil, base)
+    elsif windows
+      LibC.wcstol(to_utf16, nil, base)
+    end
   end
 
   def to_i8
@@ -169,7 +189,11 @@ class String
   end
 
   def to_i64
-    LibC.atoll cstr
+    ifdef darwin || linux
+      LibC.atoll cstr
+    elsif windows
+      LibC.wtoll to_utf16
+    end
   end
 
   def to_u8
@@ -185,7 +209,11 @@ class String
   end
 
   def to_u64
-    LibC.strtoull(cstr, nil, 10)
+    ifdef darwin || linux
+      LibC.strtoull(cstr, nil, 10)
+    elsif windows
+      LibC.wcstoull(to_utf16, nil, 10)
+    end
   end
 
   # Returns the result of interpreting leading characters in this string as a floating point number (`Float64`).
@@ -207,12 +235,20 @@ class String
   #
   # See `#to_f`.
   def to_f32
-    LibC.strtof cstr, nil
+    ifdef darwin || linux
+      LibC.strtof cstr, nil
+    elsif windows
+      LibC.wcstof to_utf16, nil
+    end
   end
 
   # Same as `#to_f`.
   def to_f64
-    LibC.atof cstr
+    ifdef darwin || linux
+      LibC.atof cstr
+    elsif windows
+      LibC.wtof to_utf16
+    end
   end
 
   def [](index : Int)
@@ -1555,6 +1591,19 @@ class String
     Slice.new(cstr + byte_offset, bytesize - byte_offset)
   end
 
+  def to_utf16
+    bufsize = LibWin32.multibytetowidechar(65001_u32, 0_u32, cstr, -1, nil, 0)
+    wcs = LibC.malloc((bufsize * 2).to_u32) as UInt16*
+    LibWin32.multibytetowidechar(65001_u32, 0_u32, cstr, -1, wcs, bufsize)
+    wcs
+  end
+
+  def self.new(chars : UInt16*)
+    bufsize = LibWin32.widechartomultibyte(65001_u32, 0_u32, chars, -1, nil, 0, nil, nil)
+    str = LibC.malloc(bufsize.to_u32) as UInt8*
+    LibWin32.widechartomultibyte(65001_u32, 0_u32, chars, -1, str, bufsize, nil, nil)
+    new(str).tap { LibC.free(str as Void*) }
+  end
 end
 
 require "./string/formatter"

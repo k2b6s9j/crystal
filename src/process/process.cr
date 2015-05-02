@@ -1,31 +1,41 @@
 lib LibC
-  @[ReturnsTwice]
-  fun fork : Int32
-
-  fun getpid : Int32
-  fun getppid : Int32
   fun exit(status : Int32) : NoReturn
 
-  ifdef x86_64
-    ClockT = UInt64
-  else
-    ClockT = UInt32
+  ifdef darwin || linux
+    @[ReturnsTwice]
+    fun fork : Int32
+
+    fun getpid : Int32
+    fun getppid : Int32
+    fun waitpid(pid : Int32, stat_loc : Int32*, options : Int32) : Int32
+
+    ifdef x86_64
+      ClockT = UInt64
+    else
+      ClockT = UInt32
+    end
+
+    SC_CLK_TCK = 3
+
+    struct Tms
+      utime : ClockT
+      stime : ClockT
+      cutime : ClockT
+      cstime : ClockT
+    end
+
+    fun times(buffer : Tms*) : ClockT
+    fun sysconf(name : Int32) : Int64
+
+    fun sleep(seconds : UInt32) : UInt32
+    fun usleep(useconds : UInt32) : UInt32
+  elsif windows
+    WAIT_CHILD      = 0
+    WAIT_GRANDCHILD = 1
+
+    fun getpid = _getpid : Int32
+    fun cwait = _cwait(termstat : Int32*, proc : IntT, action : Int32) : IntT
   end
-
-  SC_CLK_TCK = 3
-
-  struct Tms
-    utime : ClockT
-    stime : ClockT
-    cutime : ClockT
-    cstime : ClockT
-  end
-
-  fun times(buffer : Tms*) : ClockT
-  fun sysconf(name : Int32) : Int64
-
-  fun sleep(seconds : UInt32) : UInt32
-  fun usleep(useconds : UInt32) : UInt32
 end
 
 module Process
@@ -38,49 +48,138 @@ module Process
   end
 
   def self.ppid
-    LibC.getppid()
-  end
+    ifdef darwin || linux
+      LibC.getppid()
+    elsif windows
+      snapshot = LibWin32.createtoolhelp32snapshot(LibWin32::TH32CS_SNAPPROCESS, 0_u32)
 
-  def self.fork(&block)
-    pid = self.fork()
+      unless snapshot
+        raise Errno.new("Snapshot failed")
+      end
 
-    unless pid
-      yield
-      exit
+      pe :: LibWin32::WPROCESSENTRY32
+      pe.size = sizeof(LibWin32::WPROCESSENTRY32).to_u32
+
+      return 0 unless LibWin32.wprocess32first(snapshot, pointerof(pe))
+
+      retval = 0
+      pid = self.pid
+
+      loop do
+        if pe.pid == pid
+          retval = pe.ppid
+          break
+        end
+        break unless LibWin32.wprocess32next(snapshot, pointerof(pe))
+      end
+      LibWin32.closehandle snapshot
+      retval
     end
-
-    pid
-  end
-
-  def self.fork
-    pid = LibC.fork
-    pid = nil if pid == 0
-    pid
   end
 
   def self.waitpid(pid)
-    if LibC.waitpid(pid, out exit_code, 0) == -1
-      raise Errno.new("Error during waitpid")
+    ifdef darwin || linux
+      if LibC.waitpid(pid, out exit_code, 0) == -1
+        raise Errno.new("Error during waitpid")
+      end
+
+      exit_code >> 8
+    elsif windows
+      if pid != -1
+        proc = LibWin32.openprocess(LibWin32::SYNCHRONIZE | LibWin32::PROCESS_QUERY_INFORMATION, false, pid.to_u32)
+
+        if proc == 0
+          raise Errno.new("Process does not exist")
+        end
+
+        if LibC.cwait(out exit_code, proc, LibC::WAIT_CHILD) == -1
+          raise Errno.new("Error during waitpid")
+        end
+
+        LibWin32.closehandle proc
+
+        exit_code
+      else
+        snapshot = LibWin32.createtoolhelp32snapshot(LibWin32::TH32CS_SNAPPROCESS, 0_u32)
+
+        unless snapshot
+          raise Errno.new("Snapshot failed")
+        end
+
+        pe :: LibWin32::WPROCESSENTRY32
+        pe.size = sizeof(LibWin32::WPROCESSENTRY32).to_u32
+
+        unless LibWin32.wprocess32first(snapshot, pointerof(pe))
+          raise Errno.new("Error during waitpid")
+        end
+
+        children = [] of LibC::IntT
+        ppid = self.pid
+
+        loop do
+          if pe.ppid == ppid
+            children << LibWin32.openprocess(LibWin32::SYNCHRONIZE | LibWin32::PROCESS_QUERY_INFORMATION, false, pe.pid)
+          end
+          break unless LibWin32.wprocess32next(snapshot, pointerof(pe))
+        end
+        LibWin32.closehandle snapshot
+
+        return 0 if children.empty?
+
+        index = LibWin32.waitformultipleobjects(children.length.to_u32, children.buffer, false, LibWin32::INFINITE)
+        if index == -1
+          raise Errno.new("Error during waitpid")
+        end
+
+        LibWin32.getexitcodeprocess(children[index], out exit_code_u)
+
+        children.each { |child| LibWin32.closehandle(child) }
+
+        exit_code_u.to_i
+      end
+    end
+  end
+
+  ifdef darwin || linux
+    def self.fork(&block)
+      pid = self.fork()
+
+      unless pid
+        yield
+        exit
+      end
+
+      pid
     end
 
-    exit_code >> 8
-  end
+    def self.fork
+      pid = LibC.fork
+      pid = nil if pid == 0
+      pid
+    end
 
-  record Tms, utime, stime, cutime, cstime
+    record Tms, utime, stime, cutime, cstime
 
-  def self.times
-    hertz = LibC.sysconf(LibC::SC_CLK_TCK).to_f
-    LibC.times(out tms)
-    Tms.new(tms.utime / hertz, tms.stime / hertz, tms.cutime / hertz, tms.cstime / hertz)
+    def self.times
+      hertz = LibC.sysconf(LibC::SC_CLK_TCK).to_f
+      LibC.times(out tms)
+      Tms.new(tms.utime / hertz, tms.stime / hertz, tms.cutime / hertz, tms.cstime / hertz)
+    end
   end
 end
 
-def fork
-  Process.fork { yield }
-end
+ifdef darwin || linux
+  def fork
+    Process.fork { yield }
+  end
 
-def fork()
-  Process.fork()
+  def fork()
+    Process.fork()
+  end
+elsif windows
+  def fork
+    yield
+  end
 end
 
 require "./*"
