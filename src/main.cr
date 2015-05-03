@@ -54,7 +54,7 @@ ifdef darwin || linux
     end
   end
 elsif windows
-  # win32: TODO
+  # win32: TODO: exceptions, AtExitHandlers, ...
   macro redefine_main(name = main)
     fun main = {{name}}(argc : Int32, argv : UInt8**) : Int32
       GC.init

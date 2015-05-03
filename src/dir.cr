@@ -122,12 +122,10 @@ class Dir
         raise Errno.new("Error opening directory '#{@path}'")
       end
     elsif windows
-      case
-      when @path.ends_with?("\\*")
-      when @path.ends_with?('\\')
-        @path = @path + '*'
-      else
-        @path = "#{@path}\\*"
+      if @path.ends_with? '\\'
+        @path += '*'
+      elsif !@path.ends_with? "\\*"
+        @path += "\\*"
       end
       @handle = LibC.wfindfirst(@path.to_utf16, out @info)
       if @handle == -1
@@ -208,8 +206,13 @@ class Dir
 
   # Repositions this directory to the first entry.
   def rewind
-    LibC.rewinddir(@dir)
-    self
+    ifdef darwin || linux
+      LibC.rewinddir(@dir)
+      self
+    elsif windows
+      close
+      initialize @path
+    end
   end
 
   # Closes the directory stream.

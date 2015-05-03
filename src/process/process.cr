@@ -177,6 +177,7 @@ ifdef darwin || linux
     Process.fork()
   end
 elsif windows
+  # win32: TODO: remove it entirely and replace with threads/processes
   def fork
     yield
   end

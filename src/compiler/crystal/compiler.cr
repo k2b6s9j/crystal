@@ -45,6 +45,7 @@ module Crystal
       @n_threads = 8.to_i32
       @prelude = "prelude"
       @release = false
+      # win32: TODO: multiple modules don't work (cmdline gets too big)
       @single_module = ifdef darwin || linux; false; elsif windows; true; end
       @stats = false
       @verbose = false

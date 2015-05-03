@@ -59,7 +59,7 @@ module GC
     end
     LibGC.init
     ifdef windows && x86
-      # win32: TODO: x64
+      # win32: TODO: linux, darwin && windows x64
       LibGC.set_warn_proc((->LibGC.ignore_warn_proc).pointer)
     end
   end
