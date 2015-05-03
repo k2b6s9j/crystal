@@ -120,9 +120,9 @@ class String
   # str #=> "hello 1"
   # ```
   def self.build(capacity = 64)
-    builder = StringIO.new(capacity)
-    yield builder
-    builder.to_s
+    String::Builder.build(capacity) do |builder|
+      yield builder
+    end
   end
 
   # Returns the number of bytes in this string.
@@ -1359,6 +1359,10 @@ class String
     self
   end
 
+  def each_char
+    CharIterator.new(CharReader.new(self))
+  end
+
   def each_char_with_index
     i = 0
     each_char do |char|
@@ -1381,6 +1385,10 @@ class String
       yield byte
     end
     self
+  end
+
+  def each_byte
+    to_slice.each
   end
 
   def inspect(io)
@@ -1604,6 +1612,30 @@ class String
     LibWin32.widechartomultibyte(65001_u32, 0_u32, chars, -1, str, bufsize, nil, nil)
     new(str).tap { LibC.free(str as Void*) }
   end
+
+  class CharIterator
+    include Iterator(Char)
+
+    def initialize(@reader, @end = false)
+    end
+
+    def next
+      return stop if @end
+
+      value = @reader.current_char
+      @reader.next_char
+      @end = true unless @reader.has_next?
+
+      value
+    end
+
+    def rewind
+      @reader.pos = 0
+      @end = false
+      self
+    end
+  end
 end
 
 require "./string/formatter"
+require "./string/builder"

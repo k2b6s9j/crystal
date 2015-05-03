@@ -76,6 +76,11 @@ class FileDescriptorIO
     LibC.lseek(@fd, LibC::SizeT.cast(amount), whence)
   end
 
+  def rewind
+    seek(0, SEEK_SET)
+    self
+  end
+
   def tell
     LibC.lseek(@fd, LibC::SizeT.zero, LibC::SEEK_CUR)
   end

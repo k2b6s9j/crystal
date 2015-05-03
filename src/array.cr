@@ -295,6 +295,7 @@ class Array(T)
   # a.clear    #=> []
   # ```
   def clear
+    @buffer.clear(@length)
     @length = 0
     self
   end
@@ -371,6 +372,10 @@ class Array(T)
     @length
   end
 
+  def cycle
+    each.cycle
+  end
+
   def delete(obj)
     delete_if { |e| e == obj }
   end
@@ -381,6 +386,7 @@ class Array(T)
     elem = @buffer[index]
     (@buffer + index).move_from(@buffer + index + 1, length - index - 1)
     @length -= 1
+    (@buffer + @length).clear
     elem
   end
 
@@ -399,7 +405,9 @@ class Array(T)
       i1 += 1
     end
     if i2 != i1
-      @length -= (i1 - i2)
+      count = i1 - i2
+      @length -= count
+      (@buffer + @length).clear(count)
       true
     else
       false
@@ -435,6 +443,10 @@ class Array(T)
     end
   end
 
+  def each
+    Iterator.new(self)
+  end
+
   def each_index
     i = 0
     while i < length
@@ -442,6 +454,10 @@ class Array(T)
       i += 1
     end
     self
+  end
+
+  def each_index
+    IndexIterator.new(self)
   end
 
   def empty?
@@ -606,7 +622,9 @@ class Array(T)
       yield
     else
       @length -= 1
-      @buffer[@length]
+      value = @buffer[@length]
+      (@buffer + @length).clear
+      value
     end
   end
 
@@ -619,6 +637,7 @@ class Array(T)
     ary = Array(T).new(n) { |i| @buffer[@length - n + i] }
 
     @length -= n
+    (@buffer + @length).clear(n)
 
     ary
   end
@@ -671,6 +690,10 @@ class Array(T)
       yield @buffer[i]
     end
     self
+  end
+
+  def reverse_each
+    ReverseIterator.new(self)
   end
 
   def rindex(value)
@@ -730,8 +753,9 @@ class Array(T)
       yield
     else
       value = @buffer[0]
-      @length -=1
+      @length -= 1
       @buffer.move_from(@buffer + 1, @length)
+      (@buffer + @length).clear
       value
     end
   end
@@ -746,6 +770,7 @@ class Array(T)
 
     @buffer.move_from(@buffer + n, @length - n)
     @length -= n
+    (@buffer + @length).clear(n)
 
     ary
   end
@@ -879,13 +904,18 @@ class Array(T)
       return self
     end
 
+    old_length = @length
     @length = hash.length
+    removed = old_length - @length
+    return self if removed == 0
 
     ptr = @buffer
     hash.each do |k, v|
       ptr.value = v
       ptr += 1
     end
+
+    (@buffer + @length).clear(removed)
 
     self
   end
@@ -982,6 +1012,64 @@ class Array(T)
       unless h.has_key?(key)
         h[key] = o
       end
+    end
+  end
+
+  class Iterator(T)
+    include ::Iterator(T)
+
+    def initialize(@array : Array(T), @index = 0)
+    end
+
+    def next
+      value = @array.at(@index) { stop }
+      @index += 1
+      value
+    end
+
+    def rewind
+      @index = 0
+      self
+    end
+  end
+
+  class IndexIterator(T)
+    include ::Iterator(T)
+
+    def initialize(@array : Array(T), @index = 0)
+    end
+
+    def next
+      return stop if @index >= @array.length
+
+      value = @index
+      @index += 1
+      value
+    end
+
+    def rewind
+      @index = 0
+      self
+    end
+  end
+
+  class ReverseIterator(T)
+    include ::Iterator(T)
+
+    def initialize(@array : Array(T), @index = array.length - 1)
+    end
+
+    def next
+      return stop if @index < 0
+
+      value = @array.at(@index) { stop }
+      @index -= 1
+      value
+    end
+
+    def rewind
+      @index = @array.length - 1
+      self
     end
   end
 end

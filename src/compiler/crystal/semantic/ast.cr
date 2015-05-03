@@ -393,7 +393,7 @@ module Crystal
 
       begin
         generic_type = instance_type.instantiate(type_vars_types)
-      rescue ex
+      rescue ex : Crystal::Exception
         raise ex.message
       end
 
@@ -571,11 +571,6 @@ module Crystal
     @used = false
 
     property :call_convention
-
-    # Assume all external raises, in case they invoke functions defined in Crystal
-    def raises
-      true
-    end
   end
 
   class EnumDef

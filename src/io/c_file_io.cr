@@ -17,11 +17,11 @@ lib LibC
   end
 
   fun fopen(filename : UInt8*, mode : UInt8*) : File
+  fun fread(buffer : UInt8*, size : SizeT, nitems : SizeT, file : File) : SizeT
   fun fwrite(buf : UInt8*, size : SizeT, count : SizeT, fp : File) : SizeT
   fun fclose(file : File) : Int32
   fun feof(file : File) : Int32
   fun fflush(file : File) : Int32
-  fun fread(buffer : UInt8*, size : SizeT, nitems : SizeT, file : File) : SizeT
   fun rename(oldname : UInt8*, newname : UInt8*) : Int32
 
   ifdef darwin || linux
@@ -39,6 +39,8 @@ lib LibC
       fun fseeko = fseeko64(file : File, offset : Int64, whence : Int32) : Int32
       fun ftello = ftello64(file : File) : Int64
     end
+
+    fun getdelim(linep : UInt8**, linecapp : SizeT*, delimiter : Int32, stream : File) : SSizeT
 
     ifdef darwin
       $stdin = __stdinp : File
@@ -88,6 +90,24 @@ struct CFileIO
 
   def write(slice : Slice(UInt8), count)
     LibC.fwrite(slice.pointer(count), LibC::SizeT.cast(1), LibC::SizeT.cast(count), @file)
+  end
+
+  ifdef darwin || linux
+    def gets(delimiter = '\n' : Char)
+      if delimiter.ord >= 128
+        return super
+      end
+
+      linep = Pointer(UInt8).null
+      linecapp = LibC::SizeT.zero
+
+      written = LibC.getdelim(pointerof(linep), pointerof(linecapp), delimiter.ord, @file)
+      return nil if written == -1
+
+      String.new Slice.new(linep, written.to_i32)
+    end
+  elsif windows
+    # win32: TODO
   end
 
   def flush

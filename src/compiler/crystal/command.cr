@@ -232,6 +232,7 @@ USAGE
     end
     if exit_status != 0
       puts "Program terminated abnormally with error code: #{exit_status}"
+      exit 1
     end
     File.delete output_filename
   end

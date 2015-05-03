@@ -66,6 +66,7 @@ lib LibC
     elsif linux
       fun readdir = readdir64(dir : Dir*) : DirEntry*
     end
+    fun rewinddir(dir : Dir*)
 
     fun getcwd(buffer : UInt8*, size : Int32) : UInt8*
     fun chdir(path : UInt8*) : Int32
@@ -175,6 +176,10 @@ class Dir
     end
   end
 
+  def each
+    Iterator.new(self)
+  end
+
   # Reads the next entry from dir and returns it as a string. Returns nil at the end of the stream.
   #
   # ```
@@ -199,6 +204,12 @@ class Dir
         nil
       end
     end
+  end
+
+  # Repositions this directory to the first entry.
+  def rewind
+    LibC.rewinddir(@dir)
+    self
   end
 
   # Closes the directory stream.
@@ -379,6 +390,22 @@ class Dir
 
   def to_s(io)
     io << "#<Dir:" << @path << ">"
+  end
+
+  struct Iterator
+    include ::Iterator(String)
+
+    def initialize(@dir)
+    end
+
+    def next
+      @dir.read || stop
+    end
+
+    def rewind
+      @dir.rewind
+      self
+    end
   end
 end
 

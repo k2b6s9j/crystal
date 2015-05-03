@@ -454,7 +454,7 @@ module Crystal
 
       type = current_type.types[target.names.first]?
       if type
-        target.raise "already initialized constant #{target}"
+        target.raise "already initialized constant #{type}"
       end
 
       target.bind_to value
@@ -543,7 +543,7 @@ module Crystal
 
       begin
         current_type.metaclass.add_macro node
-      rescue ex
+      rescue ex : Crystal::Exception
         node.raise ex.message
       end
 
@@ -1788,7 +1788,7 @@ module Crystal
 
       begin
         old_external = current_type.add_def external
-      rescue ex
+      rescue ex : Crystal::Exception
         node.raise ex.message
       end
 
@@ -2831,7 +2831,7 @@ module Crystal
       begin
         current_type.include module_to_include
         run_hooks type.metaclass, current_type, kind, node
-      rescue ex
+      rescue ex : TypeException
         node_name.raise ex.message
       end
     end
@@ -3360,7 +3360,7 @@ module Crystal
     end
 
     def inside_block?
-      @block_context
+      @untyped_def || @block_context
     end
 
     def pushing_type(type)

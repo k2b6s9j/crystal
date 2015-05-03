@@ -1,8 +1,4 @@
 struct Int
-  def self.zero
-    cast(0)
-  end
-
   def ~
     self ^ -1
   end
@@ -19,12 +15,23 @@ struct Int
     to_f / other
   end
 
-  def %(x : Int)
-    if x == 0
+  def %(other : Int)
+    if other == 0
       raise DivisionByZero.new
+    elsif (self ^ other) >= 0
+      self.unsafe_mod(other)
+    else
+      me = self.unsafe_mod(other)
+      me == 0 ? me : me + other
     end
+  end
 
-    unsafe_mod x
+  def remainder(other : Int)
+    if other == 0
+      raise DivisionByZero.new
+    else
+      unsafe_mod other
+    end
   end
 
   def abs
@@ -94,6 +101,10 @@ struct Int
       i += 1
     end
     self
+  end
+
+  def times
+    TimesIterator(typeof(self)).new(self)
   end
 
   def upto(n, &block : self -> )
@@ -192,7 +203,7 @@ struct Int
       negative = num < 0
 
       while num != 0
-        digit = (num % 10).abs
+        digit = num.remainder(10).abs
         chars.buffer[position] = ('0'.ord + digit).to_u8
         position -= 1
         num /= 10
@@ -206,6 +217,28 @@ struct Int
       length = {{capacity}} - 1 - position
       io.write(chars.to_slice + position + 1, length)
       {length, length}
+    end
+  end
+
+  class TimesIterator(T)
+    include Iterator(T)
+
+    def initialize(@n : T, @index = 0)
+    end
+
+    def next
+      if @index < @n
+        value = @index
+        @index += 1
+        value
+      else
+        stop
+      end
+    end
+
+    def rewind
+      @index = 0
+      self
     end
   end
 end

@@ -1,4 +1,8 @@
-@[Link("ws2_32")] ifdef windows
+ifdef linux
+  @[Link("rt")]
+elsif windows
+  @[Link("ws2_32")]
+end
 @[Link("event")]
 lib LibEvent2
   type EventBase = Void*

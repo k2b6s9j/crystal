@@ -291,6 +291,8 @@ module Crystal
             atomic
           end
         when :"+=", :"-=", :"*=", :"/=", :"%=", :"|=", :"&=", :"^=", :"**=", :"<<=", :">>=", :"||=", :"&&="
+          # Rewrite 'a += b' as 'a = a + b'
+
           unexpected_token unless allow_ops
 
           break unless can_be_assigned?(atomic)
@@ -299,7 +301,9 @@ module Crystal
             raise "can't reassign to constant"
           end
 
-          # Rewrite 'a += b' as 'a = a + b'
+          if atomic.is_a?(Var) && atomic.name == "self"
+            raise "can't change the value of self", location
+          end
 
           if atomic.is_a?(Call) && atomic.name != "[]" && !@def_vars.last.includes?(atomic.name)
             raise "'#{@token.type}' before definition of '#{atomic.name}'"
@@ -1987,7 +1991,7 @@ module Crystal
       when :"("
         next_token_skip_space_or_newline
         while @token.type != :")"
-          extras = parse_arg(args, nil, true, found_default_value, found_splat)
+          extras = parse_arg(args, nil, true, found_default_value, found_splat, allow_restrictions: false)
           if !found_default_value && extras.default_value
             found_default_value = true
           end
@@ -2011,7 +2015,7 @@ module Crystal
         next_token
       when :IDENT, :"*"
         while @token.type != :NEWLINE && @token.type != :";"
-          extras = parse_arg(args, nil, false, found_default_value, found_splat)
+          extras = parse_arg(args, nil, false, found_default_value, found_splat, allow_restrictions: false)
           if !found_default_value && extras.default_value
             found_default_value = true
           end
@@ -2506,7 +2510,7 @@ module Crystal
 
     record ArgExtras, block_arg, default_value, splat
 
-    def parse_arg(args, extra_assigns, parenthesis, found_default_value, found_splat)
+    def parse_arg(args, extra_assigns, parenthesis, found_default_value, found_splat, allow_restrictions = true)
       if @token.type == :"&"
         next_token_skip_space_or_newline
         block_arg = parse_block_arg(extra_assigns)
@@ -2561,12 +2565,12 @@ module Crystal
             raise "argument must have a default value", arg_location
           end
         end
+      end
 
-        if @token.type == :":"
-          next_token_skip_space_or_newline
-          location = @token.location
-          restriction = parse_single_type
-        end
+      if allow_restrictions && @token.type == :":"
+        next_token_skip_space_or_newline
+        location = @token.location
+        restriction = parse_single_type
       end
 
       raise "Bug: arg_name is nil" unless arg_name

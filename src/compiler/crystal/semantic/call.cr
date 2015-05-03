@@ -262,6 +262,11 @@ class Crystal::Call
     if matches.empty?
       # For now, if the owner is a NoReturn just ignore the error (this call should be recomputed later)
       unless owner.no_return?
+        # Check if it's a union metaclass
+        if owner.is_a?(MetaclassType) && (instance_type = owner.instance_type).is_a?(UnionType)
+          return lookup_matches_in_union_metaclass(instance_type, arg_types)
+        end
+
         raise_matches_not_found(matches.owner || owner, def_name, matches)
       end
     end
@@ -293,8 +298,16 @@ class Crystal::Call
         match.context.owner = owner
         match.context.type_lookup = parent_visitor.type_lookup.not_nil!
       end
+      matches
     else
-      matches = bubbling_exception { lookup_matches_with_signature(owner, signature) }
+      bubbling_exception { lookup_matches_with_signature(owner, signature) }
+    end
+  end
+
+  def lookup_matches_in_union_metaclass(instance_type, arg_types)
+    matches = [] of Def
+    instance_type.union_types.each do |type|
+      matches.concat lookup_matches_in(type.metaclass, arg_types)
     end
     matches
   end
@@ -363,11 +376,17 @@ class Crystal::Call
       unless typed_def
         typed_def, typed_def_args = prepare_typed_def_with_args(match.def, match_owner, lookup_self_type, match.arg_types, block_arg_type)
         def_instance_owner.add_def_instance(def_instance_key, typed_def) if use_cache
+
         if typed_def.macro_def?
           return_type = typed_def.return_type.not_nil!
           typed_def.type = TypeLookup.lookup(match.def.macro_owner.not_nil!, return_type, match_owner.instance_type)
           mod.push_def_macro typed_def
         else
+          if typed_def_return_type = typed_def.return_type
+            return_type = TypeLookup.lookup(match.def.owner, typed_def_return_type, match_owner.instance_type)
+            typed_def.freeze_type = return_type
+          end
+
           check_recursive_splat_call match.def, typed_def_args do
             bubbling_exception do
               visitor = TypeVisitor.new(mod, typed_def_args, typed_def)
@@ -559,7 +578,7 @@ class Crystal::Call
     block_arg_type = nil
 
     block = @block.not_nil!
-    ident_lookup = MatchTypeLookup.new(match.context)
+    ident_lookup = MatchTypeLookup.new(self, match.context)
 
     block_arg_fun = block_arg.fun
 
@@ -742,7 +761,7 @@ class Crystal::Call
   end
 
   class MatchTypeLookup < TypeLookup
-    def initialize(@context)
+    def initialize(@call, @context)
       super(@context.type_lookup)
     end
 
@@ -763,7 +782,9 @@ class Crystal::Call
     end
 
     def lookup_node_type(node)
-      node.accept self
+      @call.bubbling_exception do
+        node.accept self
+      end
       type
     end
   end
