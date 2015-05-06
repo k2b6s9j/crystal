@@ -560,10 +560,13 @@ module Crystal
             atomic = parse_is_a(atomic).at(location)
           else
             name = @token.type == :IDENT ? @token.value.to_s : @token.type.to_s
+
+            @wants_regex = false
             next_token
 
             space_consumed = false
             if @token.type == :SPACE
+              @wants_regex = true
               next_token
               space_consumed = true
             end
@@ -1064,7 +1067,7 @@ module Crystal
 
       if @token.keyword?(:else)
         unless rescues
-          raise "'else' is useless without 'rescue'"
+          raise "'else' is useless without 'rescue'", @token, 4
         end
 
         next_token_skip_statement_end
@@ -1291,6 +1294,10 @@ module Crystal
         next_token_skip_space_or_newline
         while @token.type != :")"
           type_var_name = check_const
+          if type_var_name.length > 1
+            raise "type variables can only be single letters", @token
+          end
+
           if type_vars.includes? type_var_name
             raise "duplicated type var name: #{type_var_name}", @token
           end
@@ -2791,15 +2798,16 @@ module Crystal
 
       is_var = is_var?(name)
 
-      # We don't want the next token to be a regex literal if the call's name is
-      # a variable in the current scope (it's unlikely that there will be a method
-      # with that name that accepts a regex as a first argument).
-      # This allows us to write: a = 1; b = 2; a /b
-      if is_var
-        @wants_regex = false
-      end
-
+      @wants_regex = false
       next_token
+
+      if @token.type == :SPACE
+        # We don't want the next token to be a regex literal if the call's name is
+        # a variable in the current scope (it's unlikely that there will be a method
+        # with that name that accepts a regex as a first argument).
+        # This allows us to write: a = 1; b = 2; a /b
+        @wants_regex = !is_var
+      end
 
       case name
       when "super"

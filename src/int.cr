@@ -1,3 +1,60 @@
+# Int is the base type of all integer types.
+#
+# There are four signed integer types: `Int8`, `Int16`, `Int32` and `Int64`,
+# being able to represent numbers of 8, 16, 32 and 64 bits respectively.
+# There are four unsigned integer types: `UInt8`, `UInt16`, `UInt32` and `UInt64`.
+#
+# An integer literal is an optional `+` or `-` sign, followed by
+# a sequence of digits and underscores, optionally followed by a suffix.
+# If no suffix is present, the literal's type is the lowest betwen `Int32`, `Int64` and `UInt64`
+# in which the number fits:
+#
+# ```text
+# 1      # Int32
+#
+# 1_i8   # Int8
+# 1_i16  # Int16
+# 1_i32  # Int32
+# 1_i64  # Int64
+#
+# 1_u8   # UInt8
+# 1_u16  # UInt16
+# 1_u32  # UInt32
+# 1_u64  # UInt64
+#
+# +10    # Int32
+# -20    # Int32
+#
+# 2147483648          # Int64
+# 9223372036854775808 # UInt64
+# ```
+#
+# The underscore `_` before the suffix is optional.
+#
+# Underscores can be used to make some numbers more readable:
+#
+# ```text
+# 1_000_000 # better than 1000000
+# ```
+#
+# Binary numbers start with `0b`:
+#
+# ```text
+# 0b1101 # == 13
+# ```
+#
+# Octal numbers start with a zero:
+#
+# ```text
+# 0123 # == 83
+# ```
+#
+# Hexadecimal numbers start with `0x`:
+#
+# ```text
+# 0xFE012D # == 16646445
+# 0xfe012d # == 16646445
+# ```
 struct Int
   def ~
     self ^ -1
@@ -140,13 +197,13 @@ struct Int
     self % other
   end
 
-  def to_s(base : Int)
+  def to_s(base : Int, upcase = false : Bool)
     String.build do |io|
-      to_s(base, io)
+      to_s(base, io, upcase)
     end
   end
 
-  def to_s(base : Int, io : IO)
+  def to_s(base : Int, io : IO, upcase = false : Bool)
     raise "Invalid base #{base}" unless 2 <= base <= 36
 
     if self == 0
@@ -168,7 +225,7 @@ struct Int
     while num > 0
       digit = num % base
       if digit >= 10
-        str.write_byte ('A'.ord + digit - 10).to_u8
+        str.write_byte ((upcase ? 'A' : 'a').ord + digit - 10).to_u8
       else
         str.write_byte ('0'.ord + digit).to_u8
       end

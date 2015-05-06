@@ -176,6 +176,10 @@ class Crystal::CodeGenVisitor < Crystal::Visitor
     @last
   end
 
+  def codegen_binary_op(op, t1 : TypeDefType, t2, p1, p2)
+    codegen_binary_op op, t1.remove_typedef, t2, p1, p2
+  end
+
   def codegen_binary_op(op, t1, t2, p1, p2)
     raise "Bug: codegen_binary_op called with #{t1} #{op} #{t2}"
   end
@@ -226,6 +230,10 @@ class Crystal::CodeGenVisitor < Crystal::Visitor
     arg
   end
 
+  def codegen_cast(from_type : TypeDefType, to_type, arg)
+    codegen_cast from_type.remove_typedef, to_type, arg
+  end
+
   def codegen_cast(from_type, to_type, arg)
     raise "Bug: codegen_cast called from #{from_type} to #{to_type}"
   end
@@ -257,14 +265,14 @@ class Crystal::CodeGenVisitor < Crystal::Visitor
   end
 
   def codegen_primitive_pointer_set(node, target_def, call_args)
-    type = context.type as PointerInstanceType
+    type = context.type.remove_typedef as PointerInstanceType
     value = call_args[1]
     assign call_args[0], type.element_type, node.type, value
     value
   end
 
   def codegen_primitive_pointer_get(node, target_def, call_args)
-    type = context.type as PointerInstanceType
+    type = context.type.remove_typedef as PointerInstanceType
     to_lhs call_args[0], type.element_type
   end
 

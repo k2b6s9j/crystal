@@ -1017,6 +1017,11 @@ describe "Parser" do
   it_parses "foo(*{1})", Call.new(nil, "foo", Splat.new(TupleLiteral.new([1.int32] of ASTNode)))
   it_parses "foo *{1}", Call.new(nil, "foo", Splat.new(TupleLiteral.new([1.int32] of ASTNode)))
 
+  it_parses "a.b/2", Call.new(Call.new("a".call, "b"), "/", 2.int32)
+  it_parses "a.b /2/", Call.new("a".call, "b", regex("2"))
+  it_parses "a.b / 2", Call.new(Call.new("a".call, "b"), "/", 2.int32)
+  it_parses "a/b", Call.new("a".call, "/", "b".call)
+
   %w(def macro class struct module fun alias abstract include extend lib).each do |keyword|
     assert_syntax_error "def foo\n#{keyword}\nend"
   end
@@ -1116,4 +1121,7 @@ describe "Parser" do
                       "can't change the value of self"
 
   assert_syntax_error "macro foo(x : Int32); end"
+
+  assert_syntax_error "class Foo(Something); end", "type variables can only be single letters"
+  assert_syntax_error "module Foo(Something); end", "type variables can only be single letters"
 end

@@ -1736,7 +1736,7 @@ module Crystal
         restriction = arg.restriction.not_nil!
         restriction.accept self
 
-        arg_type = check_primitive_like(restriction.not_nil!)
+        arg_type = check_arg_primitive_like(restriction.not_nil!)
 
         Arg.new(arg.name, type: arg_type).at(arg.location)
       end
@@ -2456,9 +2456,9 @@ module Crystal
     def visit_binary(node)
       case typed_def.name
       when "+", "-", "*", "/", "unsafe_div"
-        t1 = scope
+        t1 = scope.remove_typedef
         t2 = typed_def.args[0].type
-        node.type = t1.integer? && t2.float? ? t2 : t1
+        node.type = t1.integer? && t2.float? ? t2 : scope
       when "==", "<", "<=", ">", ">=", "!="
         node.type = @mod.bool
       when "%", "<<", ">>", "|", "&", "^", "unsafe_mod"
@@ -2640,18 +2640,24 @@ module Crystal
       # Save old vars to know if new variables are declared inside begin/rescue/else
       before_body_vars = @vars.dup
 
-      # Any variable assigned in the body (begin) will have, inside rescue/else
+      # Any variable assigned in the body (begin) will have, inside rescue
       # blocks, all types that were assigned to them, because we can't know at which
       # point an exception is raised.
       exception_handler_vars = @exception_handler_vars = @vars.dup
 
       node.body.accept self
 
+      # We need the variables after the begin block to use in the else,
+      # but we don't dup them if we don't need them
+      if node.else
+        after_exception_handler_vars = @vars.dup
+      end
+
       @exception_handler_vars = nil
 
       if node.rescues || node.else
         # Any variable introduced in the begin block is possibly nil
-        # in the rescue/else blocks because we can't know if an exception
+        # in the rescue blocks because we can't know if an exception
         # was raised before assigning any of the vars.
         exception_handler_vars.each do |name, var|
           unless before_body_vars[name]?
@@ -2659,7 +2665,7 @@ module Crystal
           end
         end
 
-        # Now, using these vars, visit all rescue/else blocks and keep
+        # Now, using these vars, visit all rescue blocks and keep
         # the results in this variable.
         all_rescue_vars = [] of MetaVars
 
@@ -2670,8 +2676,10 @@ module Crystal
           all_rescue_vars << @vars unless @unreachable
         end
 
+        # In the else block the types are the same as in the begin block,
+        # because we assume no exception was raised.
         node.else.try do |a_else|
-          @vars = exception_handler_vars.dup
+          @vars = after_exception_handler_vars.not_nil!.dup
           @unreachable = false
           a_else.accept self
           all_rescue_vars << @vars unless @unreachable
@@ -3042,8 +3050,20 @@ module Crystal
       node.raise ex.message
     end
 
+    def check_arg_primitive_like(node)
+      type = check_primitive_like(node)
+
+      real_type = type.remove_typedef
+      if real_type.void?
+        node.raise "can't use Void as argument type"
+      end
+
+      type
+    end
+
     def check_primitive_like(node)
       type = node.type.instance_type
+
       unless type.primitive_like?
         msg = String.build do |msg|
           msg << "only primitive types, pointers, structs, unions and enums are allowed in lib declarations"

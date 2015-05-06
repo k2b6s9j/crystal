@@ -768,6 +768,10 @@ module Crystal
       end
     end
 
+    def raw_including_types
+      @including_types
+    end
+
     def passed_by_value?
       including_types = including_types()
       if including_types
@@ -1079,6 +1083,7 @@ module Crystal
 
   class PrimitiveType < ClassType
     include DefInstanceContainer
+    include ClassVarContainer
 
     getter :bytes
 
@@ -1347,6 +1352,15 @@ module Crystal
 
     def type_desc
       "generic module"
+    end
+
+    def add_including_type(type)
+      including_types = @including_types ||= [] of Type
+      including_types.push type
+    end
+
+    def raw_including_types
+      @including_types
     end
 
     def to_s(io)
@@ -1765,7 +1779,7 @@ module Crystal
     end
 
     def add_including_type(type)
-      # TODO
+      @module.add_including_type type
     end
 
     delegate container, @module
