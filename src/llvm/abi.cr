@@ -2,12 +2,14 @@
 abstract class LLVM::ABI
   getter target_data
   getter is_osx
+  getter is_ios
   getter is_windows
 
   def initialize(target_machine : TargetMachine)
     @target_data = target_machine.data_layout
     triple = target_machine.triple
-    @is_osx = !!(triple =~ /apple/)
+    @is_osx = !!(triple =~ /apple-darwin/)
+    @is_ios = !!(triple =~ /apple-ios/)
     @is_windows = !!(triple =~ /windows/)
   end
 
