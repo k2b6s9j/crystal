@@ -32,22 +32,22 @@ class LLVM::ABI::ARM < LLVM::ABI
   #    /iPhoneOSABIReference/Articles/ARMv6FunctionCallingConventions.html
   private def ios_align(type: Type)
     case type.kind
-    when Type::Kind::Integer then [4, (((type.int_width) + 7) / 8)].min
+    when Type::Kind::Integer then Math.min(4, (((type.int_width) + 7) / 8))
     when Type::Kind::Pointer then 4
     when Type::Kind::Float then 4
     when Type::Kind::Double then 4
     when Type::Kind::Struct
-      if type.is_packed
+      if type.packed_struct?
         1
       else
-        type.field_types.each do |a, t|
-          [a, ios_align(t)].max
+        type.struct_element_types.inject(1) do |a, t|
+          Math.max(a, ios_align(t))
         end
       end
     when Type::Kind::Array then ios_align(type.element_type)
-    when Type::Kind::Vector then ios_align(type.element_type) * type.vector_length
+    #when Type::Kind::Vector then ios_align(type.element_type) * type.vector_length
     else
-      raise "Unhandled Type::Kind: #{ty.kind}"
+      raise "Unhandled Type::Kind: #{type.kind}"
     end
   end
 
@@ -62,17 +62,17 @@ class LLVM::ABI::ARM < LLVM::ABI
     when Type::Kind::Float then 4
     when Type::Kind::Double then 8
     when Type::Kind::Struct
-      if type.is_packed
+      if type.packed_struct?
         1
       else
-        type.field_types.each do |a, t|
-          [a, general_align(t)].max
+        type.struct_element_types.inject(1) do |a, t|
+          Math.max(a, general_align(t))
         end
       end
     when Type::Kind::Array then general_align(type.element_type)
-    when Type::Kind::Vector then general_align(type.element_type) * type.vector_length
+    #when Type::Kind::Vector then general_align(type.element_type) * type.vector_length
     else
-      raise "Unhandled Type::Kind: #{ty.kind}"
+      raise "Unhandled Type::Kind: #{type.kind}"
     end
   end
 
@@ -86,7 +86,7 @@ class LLVM::ABI::ARM < LLVM::ABI
     when Type::Kind::Pointer then true
     when Type::Kind::Float then true
     when Type::Kind::Double then true
-    when Type::Kind::Vector then true
+    #when Type::Kind::Vector then true
     else
       false
     end
@@ -107,12 +107,12 @@ class LLVM::ABI::ARM < LLVM::ABI
     when Type::Kind::Float then 4
     when Type::Kind::Double then 8
     when Type::Kind::Struct
-      if type.is_packed
-        type.field_types.each do |s, t|
+      if type.packed_struct?
+        type.struct_element_types.each do |s, t|
           s + type_size(t, align_fn)
         end
       else
-        type.field_types.each do |s, t|
+        type.struct_element_types.each do |s, t|
           align(s, t, align_fn) + type_size(t, align_fn)
         end
         align(size, type, align_fn)
@@ -121,12 +121,12 @@ class LLVM::ABI::ARM < LLVM::ABI
       length = type.array_length
       element = type.element_type
       type_size(element, align_fn) * len
-    when Type::Kind::Vector
-      length = type.vector_length
-      element = type.element_type
-      type_size(element, align_fn) * len
+    #when Type::Kind::Vector
+    #  length = type.vector_length
+    #  element = type.element_type
+    #  type_size(element, align_fn) * len
     else
-      raise "Unhandled Type::Kind: #{ty.kind}"
+      raise "Unhandled Type::Kind: #{type.kind}"
     end
   end
 end
