@@ -98,6 +98,18 @@ describe Iterator do
       values = ary.each.cycle.to_a
       values.empty?.should be_true
     end
+
+    it "cycles N times" do
+      iter = (1..2).each.cycle(2)
+      iter.next.should eq(1)
+      iter.next.should eq(2)
+      iter.next.should eq(1)
+      iter.next.should eq(2)
+      iter.next.should be_a(Iterator::Stop)
+
+      iter.rewind
+      iter.next.should eq(1)
+    end
   end
 
   describe "with_index" do
@@ -172,6 +184,17 @@ describe Iterator do
       iter.rewind
       iter.next.should eq(1)
     end
+  end
+
+  it "creates singleton" do
+    iter = Iterator.of(42)
+    iter.take(3).to_a.should eq([42, 42, 42])
+  end
+
+  it "creates singleton from block" do
+    a = 0
+    iter = Iterator.of { a += 1 }
+    iter.take(3).to_a.should eq([1, 2, 3])
   end
 
   it "combines many iterators" do

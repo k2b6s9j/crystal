@@ -55,7 +55,7 @@ module Crystal
     end
 
     macro def class_desc : String
-      {{@class_name.split("::").last}}
+      {{@type.name.split("::").last.id.stringify }}
     end
   end
 
@@ -322,9 +322,9 @@ module Crystal
 
   class RegexLiteral < ASTNode
     property :value
-    property :modifiers
+    property :options
 
-    def initialize(@value, @modifiers = 0)
+    def initialize(@value, @options = Regex::Options::None)
     end
 
     def accept_children(visitor)
@@ -332,10 +332,10 @@ module Crystal
     end
 
     def clone_without_location
-      RegexLiteral.new(@value, @modifiers)
+      RegexLiteral.new(@value, @options)
     end
 
-    def_equals_and_hash @value, @modifiers
+    def_equals_and_hash @value, @options
   end
 
   class TupleLiteral < ASTNode

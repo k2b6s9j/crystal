@@ -153,7 +153,7 @@ module Crystal
           when RegexLiteral
             arg_value = arg.value
             if arg_value.is_a?(StringLiteral)
-              regex = Regex.new(arg_value.value, arg.modifiers)
+              regex = Regex.new(arg_value.value, arg.options)
             else
               raise "regex interpolations not yet allowed in macros"
             end
@@ -203,7 +203,7 @@ module Crystal
 
           regex_value = first.value
           if regex_value.is_a?(StringLiteral)
-            regex = Regex.new(regex_value.value, first.modifiers)
+            regex = Regex.new(regex_value.value, first.options)
           else
             raise "regex interpolations not yet allowed in macros"
           end
@@ -304,7 +304,7 @@ module Crystal
         interpret_argless_method(method, args) { BoolLiteral.new(elements.empty?) }
       when "find"
         interpret_argless_method(method, args) do
-          raise "select expects a block" unless block
+          raise "find expects a block" unless block
 
           block_arg = block.args.first?
 
@@ -346,6 +346,8 @@ module Crystal
             interpreter.accept(block.body).truthy?
           end)
         end
+      when "shuffle"
+        ArrayLiteral.new(elements.shuffle)
       when "sort"
         ArrayLiteral.new(elements.sort { |x, y| x.interpret_compare(y) })
       when "uniq"
@@ -368,8 +370,6 @@ module Crystal
         else
           raise "wrong number of arguments for [] (#{args.length} for 1)"
         end
-      when "shuffle"
-        ArrayLiteral.new(elements.shuffle)
       else
         super
       end
@@ -461,7 +461,7 @@ module Crystal
     def interpret(method, args, block, interpreter)
       case method
       when "name"
-        interpret_argless_method(method, args) { StringLiteral.new(@name) }
+        interpret_argless_method(method, args) { MacroId.new(@name) }
       when "type"
         interpret_argless_method(method, args) do
           if type = @type
@@ -480,7 +480,7 @@ module Crystal
     def interpret(method, args, block, interpreter)
       case method
       when "body"
-        interpret_argless_method(method, args) { @body || Nop.new }
+        interpret_argless_method(method, args) { @body }
       when "args"
         interpret_argless_method(method, args) do
           ArrayLiteral.map(@args) { |arg| MacroId.new(arg.name) }
@@ -576,7 +576,7 @@ module Crystal
       when "abstract?"
         interpret_argless_method(method, args) { BoolLiteral.new(type.abstract) }
       when "name"
-        interpret_argless_method(method, args) { StringLiteral.new(type.to_s) }
+        interpret_argless_method(method, args) { MacroId.new(type.to_s) }
       when "instance_vars"
         interpret_argless_method(method, args) { TypeNode.instance_vars(type) }
       when "superclass"

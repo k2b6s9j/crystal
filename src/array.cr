@@ -372,10 +372,6 @@ class Array(T)
     @length
   end
 
-  def cycle
-    each.cycle
-  end
-
   def delete(obj)
     delete_if { |e| e == obj }
   end
@@ -1044,7 +1040,7 @@ class Array(T)
 
   # :nodoc:
   class IndexIterator(T)
-    include Iterator(T)
+    include Iterator(Int32)
 
     def initialize(@array : Array(T), @index = 0)
     end

@@ -636,24 +636,13 @@ module Crystal
 
       def visit(node : InstanceVar)
         case node.name
-        when "@class_name"
-          return @last = StringLiteral.new(@scope.to_s)
-        when "@instance_vars"
-          return @last = TypeNode.instance_vars(@scope)
         when "@length"
           scope = @scope.try &.instance_type
           if scope.is_a?(TupleInstanceType)
             return @last = NumberLiteral.new(scope.tuple_types.length)
           end
-        when "@superclass"
-          return @last = TypeNode.superclass(@scope)
         when "@type"
-          return @last = TypeNode.new(@scope)
-        when "@enum_members"
-          scope = @scope.try &.instance_type
-          if scope.is_a?(EnumType)
-            return @last = TypeNode.constants(scope)
-          end
+          return @last = TypeNode.new(@scope.instance_type)
         when "@constants"
           scope = @scope.try &.instance_type
           return @last = TypeNode.constants(scope)

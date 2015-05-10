@@ -48,11 +48,11 @@ class Reference
   end
 
   macro def inspect(io : IO) : Nil
-    io << "#<{{@class_name.id}}:0x"
+    io << "#<{{@type.name.id}}:0x"
     object_id.to_s(16, io)
 
     executed = exec_recursive(:inspect) do
-      {% for ivar, i in @instance_vars %}
+      {% for ivar, i in @type.instance_vars %}
         {% if i > 0 %}
           io << ","
         {% end %}
@@ -68,7 +68,7 @@ class Reference
   end
 
   macro def to_s(io : IO) : Nil
-    io << "#<{{@class_name.id}}:0x"
+    io << "#<{{@type.name.id}}:0x"
     object_id.to_s(16, io)
     io << ">"
     nil
