@@ -6,7 +6,7 @@ ifdef darwin || linux
 elsif windows
   @[Link("z")]
   @[Link("imagehlp")]
-  @[Link("llvm")]
+  @[Link("llvm-3.5.1")]
 end
 lib LibLLVM
   type ContextRef = Void*

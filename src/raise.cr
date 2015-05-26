@@ -149,13 +149,15 @@ ifdef darwin || linux
     raise String.new(message)
   end
 elsif windows
-  fun __crystal_personality(version : Int32, actions : Int32, exception_class : UInt64, exception_object : Void*, context : Void*) : Int32
+  fun __crystal_personality(exception_record : Void*, establisher_frame : Void*, context_record : Void*, dispatcher_context : Void*) : Int32
     # puts "continue"
     return 8
   end
 
   @[Raises]
   fun __crystal_raise(unwind_ex : Void*) : NoReturn
+    #LibWin32.raiseexception(0_u32, 0_u32, 0_u32, nil)
+
     LibC.printf "Could not raise"
     LibC.exit 1
   end
@@ -165,6 +167,8 @@ elsif windows
   end
 
   def raise(ex : Exception)
+    #__crystal_raise(nil as Pointer(Void))
+
     if msg = ex.message
       LibC.printf msg
     end

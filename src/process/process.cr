@@ -57,20 +57,20 @@ module Process
         raise Errno.new("Snapshot failed")
       end
 
-      pe :: LibWin32::WPROCESSENTRY32
-      pe.size = sizeof(LibWin32::WPROCESSENTRY32).to_u32
+      pe32 :: LibWin32::WPROCESSENTRY32
+      pe32.dwsize = sizeof(typeof(pe32)).to_u32
 
-      return 0 unless LibWin32.wprocess32first(snapshot, pointerof(pe))
-
-      retval = 0
+      retval = 0_u32
       pid = self.pid
 
-      loop do
-        if pe.pid == pid
-          retval = pe.ppid
-          break
+      if LibWin32.wprocess32first(snapshot, pointerof(pe32))
+        loop do
+          if pe32.th32processid == pid
+            retval = pe32.th32parentprocessid
+            break
+          end
+          break unless LibWin32.wprocess32next(snapshot, pointerof(pe32))
         end
-        break unless LibWin32.wprocess32next(snapshot, pointerof(pe))
       end
       LibWin32.closehandle snapshot
       retval
@@ -106,21 +106,19 @@ module Process
           raise Errno.new("Snapshot failed")
         end
 
-        pe :: LibWin32::WPROCESSENTRY32
-        pe.size = sizeof(LibWin32::WPROCESSENTRY32).to_u32
-
-        unless LibWin32.wprocess32first(snapshot, pointerof(pe))
-          raise Errno.new("Error during waitpid")
-        end
+        pe32 :: LibWin32::WPROCESSENTRY32
+        pe32.dwsize = sizeof(typeof(pe32)).to_u32
 
         children = [] of LibC::IntT
         ppid = self.pid
 
-        loop do
-          if pe.ppid == ppid
-            children << LibWin32.openprocess(LibWin32::SYNCHRONIZE | LibWin32::PROCESS_QUERY_INFORMATION, false, pe.pid)
+        if LibWin32.wprocess32first(snapshot, pointerof(pe32))
+          loop do
+            if pe32.th32parentprocessid == ppid
+              children << LibWin32.openprocess(LibWin32::SYNCHRONIZE | LibWin32::PROCESS_QUERY_INFORMATION, false, pe32.th32processid)
+            end
+            break unless LibWin32.wprocess32next(snapshot, pointerof(pe32))
           end
-          break unless LibWin32.wprocess32next(snapshot, pointerof(pe))
         end
         LibWin32.closehandle snapshot
 

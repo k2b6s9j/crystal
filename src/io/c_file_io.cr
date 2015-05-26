@@ -184,15 +184,15 @@ elsif windows
         case c
         when 'm'
           LibWin32.getconsolescreenbufferinfo(handle, out last)
-          fore = last.attr & LibWin32::FOREGROUND_MASK
-          back = last.attr & LibWin32::BACKGROUND_MASK
+          fore = last.wattributes & LibWin32::FOREGROUND_MASK
+          back = last.wattributes & LibWin32::BACKGROUND_MASK
           v.each do |v|
             next if v == -1
             case v
             when 39
-              fore = default.attr & LibWin32::FOREGROUND_MASK
+              fore = default.wattributes & LibWin32::FOREGROUND_MASK
             when 49
-              back = default.attr & LibWin32::BACKGROUND_MASK
+              back = default.wattributes & LibWin32::BACKGROUND_MASK
             when 30..37
               fore = win32_colormap[v - 30]
             when 90..97
@@ -202,8 +202,8 @@ elsif windows
             when 100..107
               back = win32_colormap[v - 100] << 4 | LibWin32::BACKGROUND_INTENSITY
             when 0
-              fore = default.attr & LibWin32::FOREGROUND_MASK
-              back = default.attr & LibWin32::BACKGROUND_MASK
+              fore = default.wattributes & LibWin32::FOREGROUND_MASK
+              back = default.wattributes & LibWin32::BACKGROUND_MASK
             end
           end
           LibWin32.setconsoletextattribute(handle, (fore | back).to_u16)
