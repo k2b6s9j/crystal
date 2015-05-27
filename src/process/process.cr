@@ -54,7 +54,7 @@ module Process
       snapshot = LibWin32.createtoolhelp32snapshot(LibWin32::TH32CS_SNAPPROCESS, 0_u32)
 
       unless snapshot
-        raise Errno.new("Snapshot failed")
+        raise WinError.new("Snapshot failed")
       end
 
       pe32 :: LibWin32::WPROCESSENTRY32
@@ -89,7 +89,7 @@ module Process
         proc = LibWin32.openprocess(LibWin32::SYNCHRONIZE | LibWin32::PROCESS_QUERY_INFORMATION, false, pid.to_u32)
 
         if proc == 0
-          raise Errno.new("Process does not exist")
+          raise WinError.new("Process does not exist")
         end
 
         if LibC.cwait(out exit_code, proc, LibC::WAIT_CHILD) == -1
@@ -103,7 +103,7 @@ module Process
         snapshot = LibWin32.createtoolhelp32snapshot(LibWin32::TH32CS_SNAPPROCESS, 0_u32)
 
         unless snapshot
-          raise Errno.new("Snapshot failed")
+          raise WinError.new("Snapshot failed")
         end
 
         pe32 :: LibWin32::WPROCESSENTRY32
@@ -126,7 +126,7 @@ module Process
 
         index = LibWin32.waitformultipleobjects(children.length.to_u32, children.buffer, false, LibWin32::INFINITE)
         if index == -1
-          raise Errno.new("Error during waitpid")
+          raise WinError.new("Error during WaitForMultipleObjects")
         end
 
         LibWin32.getexitcodeprocess(children[index], out exit_code_u)

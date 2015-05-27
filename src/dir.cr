@@ -124,10 +124,12 @@ class Dir
       end
     elsif windows
       path = @path
-      if path.ends_with? '\\'
-        path += '*'
-      elsif !path.ends_with? "\\*"
-        path += "\\*"
+      if path.length > 0
+        if path.ends_with? '\\'
+          path += '*'
+        elsif !path.ends_with? "\\*"
+          path += "\\*"
+        end
       end
       @handle = LibC.wfindfirst(path.to_utf16, out @info)
       if @handle == -1

@@ -142,6 +142,7 @@ elsif windows
     fun main = {{name}}(argc : Int32, argv : UInt8**) : Int32
       GC.init
       {{yield LibCrystalMain.__crystal_main(argc, argv)}}
+      AtExitHandlers.run
       0
     end
   end

@@ -161,3 +161,17 @@ class DivisionByZero < Exception
     super(message)
   end
 end
+
+ifdef windows
+  # win32: this is not working atm, because LLVM calls TlsGetValue before we get
+  #        to WinError#initialize(), rendering LibWin32.getlasterror() useless.
+  class WinError < Exception
+    getter errorcode
+
+    def initialize(message)
+      @errorcode = LibWin32.getlasterror
+
+      super "#{message}: GetLastError() returned #{@errorcode}"
+    end
+  end
+end
