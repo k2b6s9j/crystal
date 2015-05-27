@@ -279,7 +279,7 @@ module Crystal
     end
 
     def update(from = nil)
-      to_type = to.type.instance_type
+      to_type = to.type
 
       obj_type = obj.type?
 
@@ -369,7 +369,7 @@ module Crystal
               # Try to interpret the value
               visitor = target_const.visitor
               if visitor
-                numeric_value = visitor.interpret_enum_value(value)
+                numeric_value = visitor.interpret_enum_value(value, node_type.program.int32)
                 type_var = NumberLiteral.new(numeric_value, :i32)
                 type_var.set_type_from(node_type.program.int32, from)
               else
@@ -490,6 +490,10 @@ module Crystal
 
   class Call
     property :before_vars
+    property :visibility
+  end
+
+  class Macro
     property :visibility
   end
 

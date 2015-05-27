@@ -68,15 +68,19 @@ describe Iterator do
   describe "zip" do
     it "does skip with Range iterator" do
       r1 = (1..3).each
-      r2 = (4..6).each
+      r2 = ('a'..'c').each
       iter = r1.zip(r2)
-      iter.next.should eq({1, 4})
-      iter.next.should eq({2, 5})
-      iter.next.should eq({3, 6})
+      iter.next.should eq({1, 'a'})
+      iter.next.should eq({2, 'b'})
+      iter.next.should eq({3, 'c'})
       iter.next.should be_a(Iterator::Stop)
 
       iter.rewind
-      iter.next.should eq({1, 4})
+      iter.next.should eq({1, 'a'})
+
+      # TODO: uncomment after 0.7.1
+      # iter.rewind
+      # iter.to_a.should eq([{1, 'a'}, {2, 'b'}, {3, 'c'}])
     end
   end
 
@@ -97,6 +101,18 @@ describe Iterator do
       ary = [] of Int32
       values = ary.each.cycle.to_a
       values.empty?.should be_true
+    end
+
+    it "cycles N times" do
+      iter = (1..2).each.cycle(2)
+      iter.next.should eq(1)
+      iter.next.should eq(2)
+      iter.next.should eq(1)
+      iter.next.should eq(2)
+      iter.next.should be_a(Iterator::Stop)
+
+      iter.rewind
+      iter.next.should eq(1)
     end
   end
 
@@ -150,6 +166,19 @@ describe Iterator do
     end
   end
 
+  describe "cons" do
+    it "conses" do
+      iter = (1..5).each.cons(3)
+      iter.next.should eq([1, 2, 3])
+      iter.next.should eq([2, 3, 4])
+      iter.next.should eq([3, 4, 5])
+      iter.next.should be_a(Iterator::Stop)
+
+      iter.rewind
+      iter.next.should eq([1, 2, 3])
+    end
+  end
+
   describe "uniq" do
     it "without block" do
       iter = (1..8).each.map { |x| x % 3 }.uniq
@@ -172,6 +201,52 @@ describe Iterator do
       iter.rewind
       iter.next.should eq(1)
     end
+  end
+
+  it "creates singleton" do
+    iter = Iterator.of(42)
+    iter.take(3).to_a.should eq([42, 42, 42])
+  end
+
+  it "creates singleton from block" do
+    a = 0
+    iter = Iterator.of { a += 1 }
+    iter.take(3).to_a.should eq([1, 2, 3])
+  end
+
+  it "chains" do
+    iter = (1..2).each.chain(('a'..'b').each)
+    iter.next.should eq(1)
+    iter.next.should eq(2)
+    iter.next.should eq('a')
+    iter.next.should eq('b')
+    iter.next.should be_a(Iterator::Stop)
+
+    iter.rewind
+    iter.next.should eq(1)
+
+    # TODO: uncomment after 0.7.1
+    # iter.rewind
+    # iter.to_a.should eq([1, 2, 'a', 'b'])
+  end
+
+  it "taps" do
+    a = 0
+
+    iter = (1..3).each.tap { |x| a += x }
+    iter.next.should eq(1)
+    a.should eq(1)
+
+    iter.next.should eq(2)
+    a.should eq(3)
+
+    iter.next.should eq(3)
+    a.should eq(6)
+
+    iter.next.should be_a(Iterator::Stop)
+
+    iter.rewind
+    iter.next.should eq(1)
   end
 
   it "combines many iterators" do

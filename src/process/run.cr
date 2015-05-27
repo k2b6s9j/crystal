@@ -28,11 +28,11 @@ def Process.run(command, args = nil, output = nil : IO | Bool, input = nil : Str
     argv << Pointer(UInt8).null
 
     if output
-      process_output, fork_output = IO.pipe
+      process_output, fork_output = IO.pipe(write_blocking: true)
     end
 
     if input
-      fork_input, process_input = IO.pipe
+      fork_input, process_input = IO.pipe(read_blocking: true)
     end
 
     pid = fork do
@@ -143,7 +143,7 @@ def Process.run(command, args = nil, output = nil : IO | Bool, input = nil : Str
     argv << Pointer(UInt16).null
 
     if output
-      read_from_child, child_output = IO.pipe
+      read_from_child, child_output = IO.pipe(write_blocking: true)
       outputio = child_output
 
       case output
@@ -166,7 +166,7 @@ def Process.run(command, args = nil, output = nil : IO | Bool, input = nil : Str
     end
 
     if input.is_a?(String)
-      child_input, write_to_child = IO.pipe
+      child_input, write_to_child = IO.pipe(read_blocking: true)
       stdin = STDIN.dup
       STDIN.reopen child_input
       child_input.close

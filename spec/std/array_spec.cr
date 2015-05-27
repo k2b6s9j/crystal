@@ -147,6 +147,22 @@ describe "Array" do
     end
   end
 
+  describe "values_at" do
+    it "returns the given indexes" do
+      ["a", "b", "c", "d"].values_at(1, 0, 2).should eq({"b", "a", "c"})
+    end
+
+    it "raises when passed an invalid index" do
+      expect_raises IndexOutOfBounds do
+        ["a"].values_at(10)
+      end
+    end
+
+    it "works with mixed types" do
+      [1, "a", 1.0, :a].values_at(0, 1, 2, 3).should eq({1, "a", 1.0, :a})
+    end
+  end
+
   it "does clear" do
     a = [1, 2, 3]
     a.clear
@@ -951,6 +967,33 @@ describe "Array" do
 
       iter.rewind
       iter.next.should eq(3)
+    end
+  end
+
+  describe "cycle" do
+    it "cycles" do
+      a = [] of Int32
+      [1, 2, 3].cycle do |x|
+        a << x
+        break if a.length == 9
+      end
+      a.should eq([1, 2, 3, 1, 2, 3, 1, 2, 3])
+    end
+
+    it "cycles N times" do
+      a = [] of Int32
+      [1, 2, 3].cycle(2) do |x|
+        a << x
+      end
+      a.should eq([1, 2, 3, 1, 2, 3])
+    end
+
+    it "cycles with iterator" do
+      [1, 2, 3].cycle.take(5).to_a.should eq([1, 2, 3, 1, 2])
+    end
+
+    it "cycles with N and iterator" do
+      [1, 2, 3].cycle(2).to_a.should eq([1, 2, 3, 1, 2, 3])
     end
   end
 end

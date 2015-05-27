@@ -1,7 +1,14 @@
 require "fiber"
 
+class ChannelClosed < Exception
+  def initialize
+    super("Channel is closed")
+  end
+end
+
 abstract class Channel(T)
   def initialize
+    @closed = false
     @senders = [] of Fiber
     @receivers = [] of Fiber
   end
@@ -12,6 +19,24 @@ abstract class Channel(T)
 
   def self.new(capacity)
     BufferedChannel(T).new(capacity)
+  end
+
+  def close
+    @closed = true
+    Scheduler.enqueue @receivers
+    @receivers.clear
+  end
+
+  def closed?
+    @closed
+  end
+
+  def receive
+    receive_impl { raise ChannelClosed.new }
+  end
+
+  def receive?
+    receive_impl { return nil }
   end
 
   def self.select(*channels)
@@ -32,6 +57,10 @@ abstract class Channel(T)
   protected def unwait
     @receivers.delete Fiber.current
   end
+
+  protected def raise_if_closed
+    raise ChannelClosed.new if @closed
+  end
 end
 
 class BufferedChannel(T) < Channel(T)
@@ -42,17 +71,21 @@ class BufferedChannel(T) < Channel(T)
 
   def send(value : T)
     while full?
+      raise_if_closed
       @senders << Fiber.current
       Scheduler.reschedule
     end
+
+    raise_if_closed
 
     @queue << value
     Scheduler.enqueue @receivers
     @receivers.clear
   end
 
-  def receive
+  private def receive_impl
     while empty?
+      yield if @closed
       @receivers << Fiber.current
       Scheduler.reschedule
     end
@@ -72,18 +105,28 @@ class BufferedChannel(T) < Channel(T)
   end
 
   def ready?
-    @queue.any?
+    !empty?
   end
 end
 
 class UnbufferedChannel(T) < Channel(T)
+  def initialize
+    @has_value = false
+    @value :: T
+    super
+  end
+
   def send(value : T)
-    while @value
+    while @has_value
+      raise_if_closed
       @senders << Fiber.current
       Scheduler.reschedule
     end
 
+    raise_if_closed
+
     @value = value
+    @has_value = true
     @sender = Fiber.current
 
     if receiver = @receivers.pop?
@@ -93,8 +136,9 @@ class UnbufferedChannel(T) < Channel(T)
     end
   end
 
-  def receive
-    while @value.nil?
+  private def receive_impl
+    until @has_value
+      yield if @closed
       @receivers << Fiber.current
       if sender = @senders.pop?
         sender.resume
@@ -103,13 +147,15 @@ class UnbufferedChannel(T) < Channel(T)
       end
     end
 
-    @value.not_nil!.tap do
-      @value = nil
+    yield if @closed
+
+    @value.tap do
+      @has_value = false
       Scheduler.enqueue @sender.not_nil!
     end
   end
 
   def ready?
-    !@value.nil?
+    @has_value
   end
 end

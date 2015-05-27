@@ -33,7 +33,7 @@
 # '\1'   # code point 1
 # ```
 #
-# You can use a backslash followed by an u and four hexadecimal characters to denote a unicode codepoint written:
+# You can use a backslash followed by an *u* and four hexadecimal characters to denote a unicode codepoint written:
 #
 # ```text
 # '\u0041' # == 'A'
@@ -140,9 +140,7 @@ struct Char
   # '\\'.in_set? "\\A"        #=> false
   # '\\'.in_set? "X-\\w"      #=> true
   # ```
-  def in_set? *sets
-    raise ArgumentError.new "No set given" if sets.empty?
-
+  def in_set? *sets : String
     if sets.size > 1
       return sets.all? {|set| in_set?(set) }
     end

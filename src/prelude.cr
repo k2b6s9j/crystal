@@ -1,3 +1,9 @@
+def loop
+  while true
+    yield
+  end
+end
+
 require "intrinsics"
 require "libc"
 ifdef windows
@@ -17,6 +23,7 @@ require "gc/boehm"
 require "class"
 require "comparable"
 require "enumerable"
+require "iterable"
 require "iterator"
 require "nil"
 require "bool"
@@ -49,11 +56,6 @@ require "random"
 require "regex"
 require "raise"
 require "errno"
-require "main"
 require "concurrent"
-
-def loop
-  while true
-    yield
-  end
-end
+require "signal"
+require "main"

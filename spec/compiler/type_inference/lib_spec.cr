@@ -371,6 +371,7 @@ it "errors if unknown named arg" do
         fun foo() : Bar*
 
         struct Bar
+          x : Int32
         end
       end
 
@@ -386,6 +387,7 @@ it "errors if unknown named arg" do
         end
 
         struct Foo
+          x : Int32
         end
       end
 
@@ -460,5 +462,15 @@ it "errors if unknown named arg" do
       end
       ),
       "can't use Void as argument type"
+  end
+
+  it "can use tuple as fun return" do
+    assert_type(%(
+      lib LibC
+        fun foo : {Int32, Int32}
+      end
+
+      LibC.foo
+      )) { tuple_of([int32, int32] of TypeVar) }
   end
 end

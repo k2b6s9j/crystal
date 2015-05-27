@@ -1,26 +1,113 @@
 lib LibC
-  fun atoi(str : UInt8*) : Int32
-  fun atoll(str : UInt8*) : Int64
   fun atof(str : UInt8*) : Float64
   fun strtof(str : UInt8*, endp : UInt8**) : Float32
+  fun wcstof(str : UInt16*, endp : UInt16**) : Float32
   fun strlen(str : UInt8*) : Int32
   fun snprintf(str : UInt8*, n : Int32, format : UInt8*, ...) : Int32
-  fun strtol(str : UInt8*, endptr : UInt8**, base : Int32) : Int32
-  fun strtoull(str : UInt8*, endptr : UInt8**, base : Int32) : UInt64
-
-  fun wcstof(str : UInt16*, endp : UInt16**) : Float32
-  fun wcslen(str : UInt16*) : Int32
-  fun swprintf(str : UInt16*, format : UInt16*, ...) : Int32
-  fun wcstol(str : UInt16*, endptr : UInt16**, base : Int32) : Int32
-  fun wcstoull(str : UInt16*, endptr : UInt16**, base : Int32) : UInt64
 
   ifdef windows
-    fun wtoi = _wtoi(str : UInt16*) : Int32
-    fun wtoll = _wtoi64(str : UInt16*) : Int64
     fun wtof = _wtof(str : UInt16*) : Float64
   end
 end
 
+# A String represents an immutable sequence of UTF-8 characters.
+#
+# A String is typically created with a string literal, enclosing UTF-8 characters
+# in double quotes:
+#
+# ```
+# "hello world"
+# ```
+#
+# A backslash can be used to denote some characters inside the string:
+#
+# ```text
+# "\"" # double quote
+# "\\" # backslash
+# "\e" # escape
+# "\f" # form feed
+# "\n" # newline
+# "\r" # carriage return
+# "\t" # tab
+# "\v" # vertical tab
+# ```
+#
+# You can use a backslash followed by at most three digits to denote a code point written in octal:
+#
+# ```text
+# "\101" # == "A"
+# "\123" # == "S"
+# "\12"  # == "\n"
+# "\1"   # string with one character with code point 1
+# ```
+#
+# You can use a backslash followed by an *u* and four hexadecimal characters to denote a unicode codepoint written:
+#
+# ```text
+# "\u0041" # == "A"
+# ```
+#
+# Or you can use curly braces and specify up to four hexadecimal numbers:
+#
+# ```text
+# "\u{41}" # == "A"
+# ```
+#
+# A string can span multiple lines:
+#
+# ```text
+# "hello
+#       world" # same as "hello      \nworld"
+# ```
+#
+# Note that in the above example trailing and leading spaces, as well as newlines,
+# end up in the resulting string. To avoid this, you can split a string into multiple lines
+# by joining multiple literals with a backslash:
+#
+# ```text
+# "hello " \
+# "world, " \
+# "no newlines" # same as "hello world, no newlines"
+# ```
+#
+# Alterantively, a backlash followed by a newline can be inserted inside the string literal:
+#
+# ```text
+# "hello \
+#      world, \
+#      no newlines" # same as "hello world, no newlines"
+# ```
+#
+# In this case, leading whitespace is not included in the resulting string.
+#
+# If you need to write a string that has many double quotes, parenthesis, or similar
+# characters, you can use alternative literals:
+#
+# ```text
+# # Supports double quotes and nested parenthesis
+# %(hello ("world")) # same as "hello (\"world\")"
+#
+# # Supports double quotes and nested brackets
+# %[hello ["world"]] # same as "hello [\"world\"]"
+#
+# # Supports double quotes and nested curlies
+# %{hello {"world"}} # same as "hello {\"world\"}"
+#
+# # Supports double quotes and nested angles
+# %<hello <"world">> # same as "hello <\"world\">"
+# ```
+#
+# To create a String with embedded expressions, you can use string interpolation:
+#
+# ```text
+# a = 1
+# b = 2
+# "sum = #{a + b}"        # "sum = 3"
+# ```
+#
+# This ends up invoking `Object#to_s(IO)` on each expression enclosed by `#{...}`.
+#
+# If you need to dynamically build a string, use `String#build` or `StringIO`.
 class String
   # :nodoc:
   TYPE_ID = 1
@@ -39,6 +126,9 @@ class String
   # slice = Slice.new(4) { |i| ('a'.ord + i).to_u8 }
   # String.new(slice) #=> "abcd"
   # ```
+  #
+  # Note: if the slice doesn't denote a valid UTF-8 sequence, this method still succeeds.
+  # However, when iterating it or indexing it, an `InvalidByteSequenceError` will be raised.
   def self.new(slice : Slice(UInt8))
     new(slice.pointer(slice.length), slice.length)
   end
@@ -57,6 +147,9 @@ class String
   # ptr = Pointer.malloc(5) { |i| i == 4 ? 0_u8 : ('a'.ord + i).to_u8 }
   # String.new(ptr) #=> "abcd"
   # ```
+  #
+  # Note: if the chars don't denote a valid UTF-8 sequence, this method still succeeds.
+  # However, when iterating it or indexing it, an `InvalidByteSequenceError` will be raised.
   def self.new(chars : UInt8*)
     new(chars, LibC.strlen(chars))
   end
@@ -72,6 +165,9 @@ class String
   # ptr = Pointer.malloc(4) { |i| ('a'.ord + i).to_u8 }
   # String.new(ptr, 2) => "ab"
   # ```
+  #
+  # Note: if the chars don't denote a valid UTF-8 sequence, this method still succeeds.
+  # However, when iterating it or indexing it, an `InvalidByteSequenceError` will be raised.
   def self.new(chars : UInt8*, bytesize, length = 0)
     new(bytesize) do |buffer|
       buffer.copy_from(chars, bytesize)
@@ -98,6 +194,9 @@ class String
   # end
   # str #=> "ab"
   # ```
+  #
+  # Note: if the buffer doesn't end up denoting a valid UTF-8 sequence, this method still succeeds.
+  # However, when iterating it or indexing it, an `InvalidByteSequenceError` will be raised.
   def self.new(capacity)
     str = GC.malloc_atomic((capacity + HEADER_SIZE + 1).to_u32) as UInt8*
     buffer = (str as String).cstr
@@ -108,8 +207,8 @@ class String
     str as String
   end
 
-  # Builds a String by creating a `StringIO` with the given initial capacity, yielding
-  # it to the block and finally getting a String out of it. The `StringIO` automatically
+  # Builds a String by creating a `String::Builder` with the given initial capacity, yielding
+  # it to the block and finally getting a String out of it. The `String::Builder` automatically
   # resizes as needed.
   #
   # ```
@@ -135,85 +234,324 @@ class String
     @bytesize
   end
 
-  # Returns the result of interpreting leading characters of this string
-  # as a decimal number. Extraneous characters past the end of a valid number are ignored.
-  # If there is not a valid number at the start of this string, 0 is returned.
-  # This method never raises an exception.
+  # Returns the result of interpreting leading characters in this string as an
+  # integer base *base* (between 2 and 36).
+  #
+  # If there is not a valid number at the start of this string,
+  # or if the resulting integer doesn't fit an Int32, an ArgumentError is raised.
+  #
+  # Options:
+  # * **whitespace**: if true, leading and trailing whitespaces are allowed
+  # * **underscore**: if true, underscores in numbers are allowed
+  # * **prefix**: if true, the prefixes "0x", "0" and "0b" override the base
+  # * **strict**: if true, extraneous characters past the end of the number are disallowed
   #
   # ```
-  # "12345".to_i             #=> 12345
-  # "99 red balloons".to_i   #=> 99
-  # "0a".to_i                #=> 0
-  # "hello".to_i             #=> 0
+  # "12345".to_i                             #=> 12345
+  # "0a".to_i                                #=> 0
+  # "hello".to_i                             #=> raises
+  # "0a".to_i(16)                            #=> 10
+  # "1100101".to_i(2)                        #=> 101
+  # "1100101".to_i(8)                        #=> 294977
+  # "1100101".to_i(10)                       #=> 1100101
+  # "1100101".to_i(base: 16)                 #=> 17826049
+  #
+  # "12_345".to_i                            #=> raises
+  # "12_345".to_i(underscore: true)          #=> 12345
+  #
+  # "  12345  ".to_i                         #=> 12345
+  # "  12345  ".to_i(whitepsace: false)      #=> raises
+  #
+  # "0x123abc".to_i                          #=> raises
+  # "0x123abc".to_i(prefix: true)            #=> 1194684
+  #
+  # "99 red balloons".to_i                   #=> raises
+  # "99 red balloons".to_i(strict: false)    #=> 99
   # ```
-  def to_i
-    ifdef darwin || linux
-      LibC.atoi cstr
-    elsif windows
-      LibC.wtoi to_utf16
+  def to_i(base = 10, whitespace = true, underscore = false, prefix = false, strict = true)
+    to_i32(base, whitespace, underscore, prefix, strict)
+  end
+
+  # Same as `#to_i`, but returns `nil` if there is not a valid number at the start
+  # of this string, or if the resulting integer doesn't fit an Int32.
+  #
+  # ```
+  # "12345".to_i?            #=> 12345
+  # "99 red balloons".to_i?  #=> 99
+  # "0a".to_i?               #=> 0
+  # "hello".to_i?            #=> nil
+  # ```
+  def to_i?(base = 10, whitespace = true, underscore = false, prefix = false, strict = true)
+    to_i32?(base, whitespace, underscore, prefix, strict)
+  end
+
+  # Same as `#to_i`, but returns the block's value if there is not a valid number at the start
+  # of this string, or if the resulting integer doesn't fit an Int32.
+  #
+  # ```
+  # "12345".to_i { 0 }       #=> 12345
+  # "hello".to_i { 0 }       #=> 0
+  # ```
+  def to_i(base = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
+    to_i32(base, whitespace, underscore, prefix, strict) { yield }
+  end
+
+  # Same as `#to_i` but returns an Int8.
+  def to_i8(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : Int8
+    to_i8(base, whitespace, underscore, prefix, strict) { raise ArgumentError.new("invalid Int8: #{self}") }
+  end
+
+  # Same as `#to_i` but returns an Int8 or nil.
+  def to_i8?(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : Int8?
+    to_i8(base, whitespace, underscore, prefix, strict) { nil }
+  end
+
+  # Same as `#to_i` but returns an Int8 or the block's value.
+  def to_i8(base = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
+    gen_to_ i8, 127, 128
+  end
+
+  # Same as `#to_i` but returns an UInt8.
+  def to_u8(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : UInt8
+    to_u8(base, whitespace, underscore, prefix, strict) { raise ArgumentError.new("invalid UInt8: #{self}") }
+  end
+
+  # Same as `#to_i` but returns an UInt8 or nil.
+  def to_u8?(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : UInt8?
+    to_u8(base, whitespace, underscore, prefix, strict) { nil }
+  end
+
+  # Same as `#to_i` but returns an UInt8 or the block's value.
+  def to_u8(base = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
+    gen_to_ u8, 255
+  end
+
+  # Same as `#to_i` but returns an Int16.
+  def to_i16(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : Int16
+    to_i16(base, whitespace, underscore, prefix, strict) { raise ArgumentError.new("invalid Int16: #{self}") }
+  end
+
+  # Same as `#to_i` but returns an Int16 or nil.
+  def to_i16?(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : Int16?
+    to_i16(base, whitespace, underscore, prefix, strict) { nil }
+  end
+
+  # Same as `#to_i` but returns an Int16 or the block's value.
+  def to_i16(base = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
+    gen_to_ i16, 32767, 32768
+  end
+
+  # Same as `#to_i` but returns an UInt16.
+  def to_u16(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : UInt16
+    to_u16(base, whitespace, underscore, prefix, strict) { raise ArgumentError.new("invalid UInt16: #{self}") }
+  end
+
+  # Same as `#to_i` but returns an UInt16 or nil.
+  def to_u16?(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : UInt16?
+    to_u16(base, whitespace, underscore, prefix, strict) { nil }
+  end
+
+  # Same as `#to_i` but returns an UInt16 or the block's value.
+  def to_u16(base = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
+    gen_to_ u16, 65535
+  end
+
+  # Same as `#to_i`.
+  def to_i32(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : Int32
+    to_i32(base, whitespace, underscore, prefix, strict) { raise ArgumentError.new("invalid Int32: #{self}") }
+  end
+
+  # Same as `#to_i`.
+  def to_i32?(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : Int32?
+    to_i32(base, whitespace, underscore, prefix, strict) { nil }
+  end
+
+  # Same as `#to_i`.
+  def to_i32(base = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
+    gen_to_ i32, 2147483647, 2147483648
+  end
+
+  # Same as `#to_i` but returns an UInt32.
+  def to_u32(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : UInt32
+    to_u32(base, whitespace, underscore, prefix, strict) { raise ArgumentError.new("invalid UInt32: #{self}") }
+  end
+
+  # Same as `#to_i` but returns an UInt32 or nil.
+  def to_u32?(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : UInt32?
+    to_u32(base, whitespace, underscore, prefix, strict) { nil }
+  end
+
+  # Same as `#to_i` but returns an UInt32 or the block's value.
+  def to_u32(base = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
+    gen_to_ u32, 4294967295
+  end
+
+  # Same as `#to_i` but returns an Int64.
+  def to_i64(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : Int64
+    to_i64(base, whitespace, underscore, prefix, strict) { raise ArgumentError.new("invalid Int64: #{self}") }
+  end
+
+  # Same as `#to_i` but returns an Int64 or nil.
+  def to_i64?(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : Int64?
+    to_i64(base, whitespace, underscore, prefix, strict) { nil }
+  end
+
+  # Same as `#to_i` but returns an Int64 or the block's value.
+  def to_i64(base = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
+    gen_to_ i64, 9223372036854775807, 9223372036854775808
+  end
+
+  # Same as `#to_i` but returns an UInt64.
+  def to_u64(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : UInt64
+    to_u64(base, whitespace, underscore, prefix, strict) { raise ArgumentError.new("invalid UInt64: #{self}") }
+  end
+
+  # Same as `#to_i` but returns an UInt64 or nil.
+  def to_u64?(base = 10, whitespace = true, underscore = false, prefix = false, strict = true) : UInt64?
+    to_u64(base, whitespace, underscore, prefix, strict) { nil }
+  end
+
+  # Same as `#to_i` but returns an UInt64 or the block's value.
+  def to_u64(base = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
+    gen_to_ u64
+  end
+
+  # :nodoc:
+  CHAR_TO_DIGIT = begin
+    table = StaticArray(Int8, 256).new(-1_i8)
+    10_i8.times do |i|
+      table.to_unsafe[48 + i] = i
+    end
+    26_i8.times do |i|
+      table.to_unsafe[65 + i] = i + 10
+      table.to_unsafe[97 + i] = i + 10
+    end
+    table
+  end
+
+  # :nodoc:
+  record ToU64Info, value, negative, invalid
+
+  # :nodoc
+  macro gen_to_(method, max_positive = nil, max_negative = nil)
+    info = to_u64_info(base, whitespace, underscore, prefix, strict)
+    return yield if info.invalid
+
+    if info.negative
+      {% if max_negative %}
+        return yield if info.value > {{max_negative}}
+        -info.value.to_{{method}}
+      {% else %}
+        return yield
+      {% end %}
+    else
+      {% if max_positive %}
+        return yield if info.value > {{max_positive}}
+      {% end %}
+      info.value.to_{{method}}
     end
   end
 
-  # Returns the result of interpreting leading characters in this string as an integer base *base*
-  # (between 2 and 36). Extraneous characters past the end of a valid number are ignored.
-  # If there is not a valid number at the start of str, 0 is returned.
-  # This method never raises an exception when base is valid.
-  #
-  # ```
-  # "0a".to_i(16)            #=> 10
-  # "1100101".to_i(2)        #=> 101
-  # "1100101".to_i(8)        #=> 294977
-  # "1100101".to_i(10)       #=> 1100101
-  # "1100101".to_i(16)       #=> 17826049
-  # ```
-  def to_i(base)
+  private def to_u64_info(base, whitespace, underscore, prefix, strict)
     raise "Invalid base #{base}" unless 2 <= base <= 36
 
-    ifdef darwin || linux
-      LibC.strtol(cstr, nil, base)
-    elsif windows
-      LibC.wcstol(to_utf16, nil, base)
+    ptr = cstr
+
+    # Skip leading whitespace
+    if whitespace
+      while ptr.value.chr.whitespace?
+        ptr += 1
+      end
     end
-  end
 
-  def to_i8
-    to_i.to_i8
-  end
+    negative = false
+    found_digit = false
+    mul_overflow = ~0_u64 / base
 
-  def to_i16
-    to_i.to_i16
-  end
-
-  def to_i32
-    to_i
-  end
-
-  def to_i64
-    ifdef darwin || linux
-      LibC.atoll cstr
-    elsif windows
-      LibC.wtoll to_utf16
+    # Check + and -
+    case ptr.value.chr
+    when '+'
+      ptr += 1
+    when '-'
+      negative = true
+      ptr += 1
     end
-  end
 
-  def to_u8
-    to_i.to_u8
-  end
+    # Check leading zero
+    if ptr.value.chr == '0'
+      ptr += 1
 
-  def to_u16
-    to_i.to_u16
-  end
-
-  def to_u32
-    to_i64.to_u32
-  end
-
-  def to_u64
-    ifdef darwin || linux
-      LibC.strtoull(cstr, nil, 10)
-    elsif windows
-      LibC.wcstoull(to_utf16, nil, 10)
+      if prefix
+        case ptr.value.chr
+        when 'b'
+          base = 2
+          ptr += 1
+        when 'x'
+          base = 16
+          ptr += 1
+        else
+          base = 8
+        end
+        found_digit = false
+      else
+        found_digit = true
+      end
     end
+
+    value = 0_u64
+    last_is_underscore = true
+    invalid = false
+
+    digits = CHAR_TO_DIGIT.to_unsafe
+    while ptr.value != 0
+      if ptr.value.chr == '_' && underscore
+        break if last_is_underscore
+        last_is_underscore = true
+        ptr += 1
+        next
+      end
+
+      last_is_underscore = false
+      digit = digits[ptr.value]
+      if digit == -1 || digit >= base
+        break
+      end
+
+      if value > mul_overflow
+        invalid = true
+        break
+      end
+
+      value *= base
+
+      old = value
+      value += digit
+      if value < old
+        invalid = true
+        break
+      end
+
+      found_digit = true
+      ptr += 1
+    end
+
+    if found_digit
+      unless ptr.value == 0
+        if whitespace
+          while ptr.value.chr.whitespace?
+            ptr += 1
+          end
+        end
+
+        if strict && ptr.value != 0
+          invalid = true
+        end
+      end
+    else
+      invalid = true
+    end
+
+    ToU64Info.new value, negative, invalid
   end
 
   # Returns the result of interpreting leading characters in this string as a floating point number (`Float64`).
@@ -251,10 +589,34 @@ class String
     end
   end
 
+  # Returns the `Char` at the give index, or raises `IndexOutOfBounds` if out of bounds.
+  #
+  # Negative indices can be used to start counting from the end of the string.
+  #
+  # ```
+  # "hello"[0]  # 'h'
+  # "hello"[1]  # 'e'
+  # "hello"[-1] # 'o'
+  # "hello"[-2] # 'l'
+  # "hello"[5]  # raises IndexOutOfBounds
+  # ```
   def [](index : Int)
     at(index) { raise IndexOutOfBounds.new }
   end
 
+  # Returns a substring by using a Range's *begin* and *end*
+  # as character indices. Indices can be negative to start
+  # counting from the end of the string.
+  #
+  # This method never raises: at most, the whole string or the empty
+  # string will be returned.
+  #
+  # ```
+  # "hello"[0..2]  # "hel"
+  # "hello"[0...2] # "he"
+  # "hello"[1..-1]  # "ello"
+  # "hello"[1...-1]  # "ell"
+  # ```
   def [](range : Range(Int, Int))
     from = range.begin
     from += length if from < 0
@@ -762,12 +1124,18 @@ class String
   # "aaabbbcccddd".squeeze("b-d") #=> "aaabcd"
   # "a       bbb".squeeze #=> "a b"
   # ```
-  def squeeze(*sets)
-    if sets.empty?
-      squeeze { true }
-    else
-      squeeze {|char| char.in_set?(*sets) }
-    end
+  def squeeze(*sets : String)
+    squeeze {|char| char.in_set?(*sets) }
+  end
+
+  # Returns a new string, that has all characters removed,
+  # that were the same as the previous one.
+  #
+  # ```
+  # "a       bbb".squeeze #=> "a b"
+  # ```
+  def squeeze
+    squeeze { true }
   end
 
   def empty?
@@ -1158,7 +1526,28 @@ class String
   end
 
   def lines
-    split "\n"
+    lines = [] of String
+    each_line do |line|
+      lines << line
+    end
+    lines
+  end
+
+  def each_line
+    offset = 0
+
+    while byte_index = byte_index('\n'.ord.to_u8, offset)
+      yield String.new(unsafe_byte_slice(offset, byte_index + 1 - offset))
+      offset = byte_index + 1
+    end
+
+    unless offset == bytesize
+      yield String.new(unsafe_byte_slice(offset))
+    end
+  end
+
+  def each_line
+    LineIterator.new(self)
   end
 
   def underscore
@@ -1613,6 +2002,7 @@ class String
     new(str).tap { LibC.free(str as Void*) }
   end
 
+  # :nodoc:
   class CharIterator
     include Iterator(Char)
 
@@ -1631,6 +2021,41 @@ class String
 
     def rewind
       @reader.pos = 0
+      @end = false
+      self
+    end
+  end
+
+  # :nodoc:
+  class LineIterator
+    include Iterator(String)
+
+    def initialize(@string)
+      @offset = 0
+      @end = false
+    end
+
+    def next
+      return stop if @end
+
+      byte_index = @string.byte_index('\n'.ord.to_u8, @offset)
+      if byte_index
+        value = String.new(@string.unsafe_byte_slice(@offset, byte_index + 1 - @offset))
+        @offset = byte_index + 1
+      else
+        if @offset == @string.bytesize
+          value = stop
+        else
+          value = String.new(@string.unsafe_byte_slice(@offset))
+        end
+        @end = true
+      end
+
+      value
+    end
+
+    def rewind
+      @offset = 0
       @end = false
       self
     end

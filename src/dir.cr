@@ -111,6 +111,7 @@ end
 # the parent directory (..), and the directory itself (.).
 class Dir
   include Enumerable(String)
+  include Iterable
 
   getter path
 
@@ -122,12 +123,13 @@ class Dir
         raise Errno.new("Error opening directory '#{@path}'")
       end
     elsif windows
-      if @path.ends_with? '\\'
-        @path += '*'
-      elsif !@path.ends_with? "\\*"
-        @path += "\\*"
+      path = @path
+      if path.ends_with? '\\'
+        path += '*'
+      elsif !path.ends_with? "\\*"
+        path += "\\*"
       end
-      @handle = LibC.wfindfirst(@path.to_utf16, out @info)
+      @handle = LibC.wfindfirst(path.to_utf16, out @info)
       if @handle == -1
         raise Errno.new("Error opening directory '#{@path}'")
       else
@@ -175,7 +177,7 @@ class Dir
   end
 
   def each
-    Iterator.new(self)
+    EntryIterator.new(self)
   end
 
   # Reads the next entry from dir and returns it as a string. Returns nil at the end of the stream.
@@ -395,8 +397,9 @@ class Dir
     io << "#<Dir:" << @path << ">"
   end
 
-  struct Iterator
-    include ::Iterator(String)
+  # :nodoc:
+  struct EntryIterator
+    include Iterator(String)
 
     def initialize(@dir)
     end

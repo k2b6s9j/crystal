@@ -33,14 +33,20 @@ Status
 Installing
 ----------
 
-[Follow these instructions](http://crystal-lang.org/docs/installation/README.html)
+[Follow these instructions](http://crystal-lang.org/docs/installation/index.html)
+
+Documentation
+----------
+
+Both in progress:
+
+* [Official docs](http://crystal-lang.org/docs)
+* [Standard library API](http://crystal-lang.org/api)
 
 Community
 ---------
 
 Questions or suggestions? Ask in our [Google Group](https://groups.google.com/forum/?fromgroups#!forum/crystal-lang) or join our IRC channel #crystal-lang at irc.freenode.net
-
-[![githalytics.com alpha](https://cruel-carlota.pagodabox.com/25b65355cae65602787d6952d0bdb8cf "githalytics.com")](http://githalytics.com/manastech/crystal)
 
 Contributing
 ---------

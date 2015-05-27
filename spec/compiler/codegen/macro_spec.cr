@@ -145,14 +145,14 @@ describe "Code gen: macro" do
       )).to_i.should eq(1)
   end
 
-  it "expands def macro with @instance_vars" do
+  it "expands def macro with @type.instance_vars" do
     run(%(
       class Foo
         def initialize(@x)
         end
 
         macro def to_s : String
-          {{ @instance_vars.first.stringify }}
+          {{ @type.instance_vars.first.stringify }}
         end
       end
 
@@ -161,11 +161,11 @@ describe "Code gen: macro" do
       )).to_string.should eq("x")
   end
 
-  it "expands def macro with @instance_vars with subclass" do
+  it "expands def macro with @type.instance_vars with subclass" do
     run(%(
       class Reference
         macro def to_s : String
-          {{ @instance_vars.last.stringify }}
+          {{ @type.instance_vars.last.stringify }}
         end
       end
 
@@ -183,11 +183,11 @@ describe "Code gen: macro" do
       )).to_string.should eq("y")
   end
 
-  it "expands def macro with @instance_vars with virtual" do
+  it "expands def macro with @type.instance_vars with virtual" do
     run(%(
       class Reference
         macro def to_s : String
-          {{ @instance_vars.last.stringify }}
+          {{ @type.instance_vars.last.stringify }}
         end
       end
 
@@ -205,14 +205,14 @@ describe "Code gen: macro" do
       )).to_string.should eq("y")
   end
 
-  it "expands def macro with @class_name" do
+  it "expands def macro with @type.name" do
     run(%(
       class Foo
         def initialize(@x)
         end
 
         macro def to_s : String
-          {{@class_name}}
+          {{@type.name.stringify}}
         end
       end
 
@@ -237,11 +237,11 @@ describe "Code gen: macro" do
       )).to_i.should eq(1)
   end
 
-  it "expands def macro with @class_name with virtual" do
+  it "expands def macro with @type.name with virtual" do
     run(%(
       class Reference
         macro def to_s : String
-          {{ @class_name }}
+          {{ @type.name.stringify }}
         end
       end
 
@@ -255,11 +255,11 @@ describe "Code gen: macro" do
       )).to_string.should eq("Bar")
   end
 
-  it "expands def macro with @class_name with virtual (2)" do
+  it "expands def macro with @type.name with virtual (2)" do
     run(%(
       class Reference
         macro def to_s : String
-          {{ @class_name }}
+          {{ @type.name.stringify }}
         end
       end
 
@@ -277,7 +277,7 @@ describe "Code gen: macro" do
     run(%(
       class Foo
         macro def inspect : String
-          {{@class_name}}
+          {{@type.name.stringify}}
         end
       end
 
@@ -298,7 +298,7 @@ describe "Code gen: macro" do
     run(%(
       macro foo
         def bar
-          {{@class_name}}
+          {{@type.name.stringify}}
         end
       end
 
@@ -343,11 +343,11 @@ describe "Code gen: macro" do
       )).to_i.should eq(1)
   end
 
-  it "expands @class_name in virtual metaclass (1)" do
+  it "expands @type.name in virtual metaclass (1)" do
     run(%(
       class Class
         macro def to_s : String
-          {{ @class_name }}
+          {{ @type.name.stringify }}
         end
       end
 
@@ -361,14 +361,14 @@ describe "Code gen: macro" do
       p.value = Bar
       p.value = Foo
       p.value.to_s
-      )).to_string.should eq("Foo:Class")
+      )).to_string.should eq("Foo")
   end
 
-  it "expands @class_name in virtual metaclass (2)" do
+  it "expands @type.name in virtual metaclass (2)" do
     run(%(
       class Class
         macro def to_s : String
-          {{ @class_name }}
+          {{ @type.name.stringify }}
         end
       end
 
@@ -382,7 +382,7 @@ describe "Code gen: macro" do
       p.value = Foo
       p.value = Bar
       p.value.to_s
-      )).to_string.should eq("Bar:Class")
+      )).to_string.should eq("Bar")
   end
 
   it "doesn't skip abstract classes when defining macro methods" do
@@ -442,7 +442,7 @@ describe "Code gen: macro" do
 
       Foo.new(1, 2)
 
-      {{ Foo.instance_vars.last.name }}
+      {{ Foo.instance_vars.last.name.stringify }}
       )).to_string.should eq("y")
   end
 
@@ -554,7 +554,7 @@ describe "Code gen: macro" do
     run(%(
       class Foo
         macro def foo : String
-          {{@type.name}}
+          {{@type.name.stringify}}
         end
       end
 
@@ -592,7 +592,7 @@ describe "Code gen: macro" do
     run(%(
       class Foo
         macro def class_desc : String
-          {{@class_name}}
+          {{@type.name.stringify}}
         end
       end
 
@@ -669,30 +669,6 @@ describe "Code gen: macro" do
       names = {{ Foo.all_subclasses.map &.name }}
       names.join("-")
       )).to_string.should eq("Bar-Baz")
-  end
-
-  it "gets enum members with @enum_members (will be deprecated)" do
-    run(%(
-      enum Color
-        Red
-        Green
-        Blue
-
-        def self.red
-          {{@enum_members[0]}}
-        end
-
-        def self.green
-          {{@enum_members[1]}}
-        end
-
-        def self.blue
-          {{@enum_members[2]}}
-        end
-      end
-
-      Color.red.value + Color.green.value + Color.blue.value
-      )).to_i.should eq(0 + 1 + 2)
   end
 
   it "gets enum members with @constants" do
@@ -776,7 +752,7 @@ describe "Code gen: macro" do
     run(%(
       class Object
         macro def class_name : String
-          {{@class_name}}
+          {{@type.name.stringify}}
         end
       end
 
@@ -823,7 +799,7 @@ describe "Code gen: macro" do
         end
 
         macro def self.run : Nil
-          $x << {{@class_name}}
+          $x << {{@type.name.stringify}}
           nil
         end
       end
@@ -839,7 +815,7 @@ describe "Code gen: macro" do
 
       run
       $x.join(", ")
-      )).to_string.should eq("Test:Class, RunnableTest:Class")
+      )).to_string.should eq("Test, RunnableTest")
   end
 
   it "correctly recomputes call (bug)" do
@@ -856,7 +832,7 @@ describe "Code gen: macro" do
         end
 
         macro def bar : String
-          {{@class_name}}
+          {{@type.name.stringify}}
         end
       end
 
@@ -874,7 +850,7 @@ describe "Code gen: macro" do
 
       f2 = Baz.new || Foo.new
       f2.class.in_object
-      )).to_string.should eq("Baz:Class")
+      )).to_string.should eq("Baz")
   end
 
   it "doesn't override local variable when using macro variable" do

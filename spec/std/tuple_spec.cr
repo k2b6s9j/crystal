@@ -47,6 +47,22 @@ describe "Tuple" do
     a.at(2) { 3 }.should eq(3)
   end
 
+  describe "values_at" do
+    it "returns the given indexes" do
+      {"a", "b", "c", "d"}.values_at(1, 0, 2).should eq({"b", "a", "c"})
+    end
+
+    it "raises when passed an invalid index" do
+      expect_raises IndexOutOfBounds do
+        {"a"}.values_at(10)
+      end
+    end
+
+    it "works with mixed types" do
+      {1, "a", 1.0, :a}.values_at(0, 1, 2, 3).should eq({1, "a", 1.0, :a})
+    end
+  end
+
   it "does ==" do
     a = {1, 2}
     b = {3, 4}
@@ -126,5 +142,36 @@ describe "Tuple" do
 
   it "clones empty tuple" do
     Tuple.new.clone.should eq(Tuple.new)
+  end
+
+  it "does iterator" do
+    iter = {1, 2, 3}.each
+
+    iter.next.should eq(1)
+    iter.next.should eq(2)
+    iter.next.should eq(3)
+    iter.next.should be_a(Iterator::Stop)
+
+    iter.rewind
+    iter.next.should eq(1)
+  end
+
+  it "does map" do
+    tuple = {1, 2.5, "a"}
+    tuple2 = tuple.map &.to_s
+    tuple2.should be_a(Tuple)
+    tuple2.should eq({"1", "2.5", "a"})
+  end
+
+  it "gets first element" do
+    tuple = {1, 2.5}
+    tuple.first.should eq(1)
+    typeof(tuple.first).should eq(Int32)
+  end
+
+  it "gets last element" do
+    tuple = {1, 2.5, "a"}
+    tuple.last.should eq("a")
+    # typeof(tuple.last).should eq(String)
   end
 end

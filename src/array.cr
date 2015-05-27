@@ -44,7 +44,8 @@
 # set << 3
 # ```
 class Array(T)
-  include Enumerable
+  include Enumerable(T)
+  include Iterable
   include Comparable(Array)
 
   getter length
@@ -284,6 +285,16 @@ class Array(T)
     end
   end
 
+  # Returns a tuple populated with the elements at the given indexes.
+  # Raises if any index is invalid.
+  #
+  # ```
+  # ["a", "b", "c", "d"].values_at(0, 2) #=> {"a", "c"}
+  # ```
+  def values_at(*indexes : Int)
+    indexes.map {|index| self[index] }
+  end
+
   def buffer
     @buffer
   end
@@ -372,10 +383,6 @@ class Array(T)
     @length
   end
 
-  def cycle
-    each.cycle
-  end
-
   def delete(obj)
     delete_if { |e| e == obj }
   end
@@ -444,7 +451,7 @@ class Array(T)
   end
 
   def each
-    Iterator.new(self)
+    ItemIterator.new(self)
   end
 
   def each_index
@@ -665,7 +672,7 @@ class Array(T)
     self
   end
 
-  def push(*values)
+  def push(*values : T)
     values.each do |value|
       self << value
     end
@@ -1023,8 +1030,9 @@ class Array(T)
     end
   end
 
-  class Iterator(T)
-    include ::Iterator(T)
+  # :nodoc:
+  class ItemIterator(T)
+    include Iterator(T)
 
     def initialize(@array : Array(T), @index = 0)
     end
@@ -1041,8 +1049,9 @@ class Array(T)
     end
   end
 
+  # :nodoc:
   class IndexIterator(T)
-    include ::Iterator(T)
+    include Iterator(Int32)
 
     def initialize(@array : Array(T), @index = 0)
     end
@@ -1061,8 +1070,9 @@ class Array(T)
     end
   end
 
+  # :nodoc:
   class ReverseIterator(T)
-    include ::Iterator(T)
+    include Iterator(T)
 
     def initialize(@array : Array(T), @index = array.length - 1)
     end

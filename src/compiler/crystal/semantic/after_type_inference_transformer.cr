@@ -44,17 +44,11 @@ module Crystal
       length = node.expressions.length
       node.expressions.each_with_index do |exp, i|
         new_exp = exp.transform(self)
-        if new_exp
-          if new_exp.is_a?(Expressions)
-            exps.concat new_exp.expressions
-          else
-            exps << new_exp
-          end
 
-          if new_exp.no_returns?
-            break
-          end
-        end
+        # We collect the transformed expressions, recursively,
+        # by flattening them. We stop collecting when there's
+        # a NoReturn expression, next, break or return.
+        break if flatten_collect(new_exp, exps)
       end
 
       if exps.empty?
@@ -66,6 +60,20 @@ module Crystal
       node.expressions = exps
       rebind_node node, exps.last
       node
+    end
+
+    def flatten_collect(exp, exps)
+      if exp.is_a?(Expressions)
+        exp.expressions.each do |subexp|
+          return true if flatten_collect(subexp, exps)
+        end
+      else
+        exps << exp
+        if exp.is_a?(Break) || exp.is_a?(Next) || exp.is_a?(Return) || exp.no_returns?
+          return true
+        end
+      end
+      false
     end
 
     def transform(node : ExpandableNode)
@@ -239,7 +247,18 @@ module Crystal
               @transformed.add(target_def.object_id)
 
               node.bubbling_exception do
+                old_body = target_def.body
+                old_type = target_def.body.type?
                 target_def.body = target_def.body.transform(self)
+                new_type = target_def.body.type?
+
+                # It can happen that the body of the function changed, and as
+                # a result the type changed. In that case we need to rebind the
+                # def to the new body, unbinding it from the prevoius one.
+                if new_type != old_type
+                  target_def.unbind_from old_body
+                  target_def.bind_to target_def.body
+                end
               end
             end
           else
@@ -511,7 +530,7 @@ module Crystal
       obj_type = node.obj.type?
       return node unless obj_type
 
-      to_type = node.to.type.instance_type
+      to_type = node.to.type
 
       if to_type.pointer?
         if obj_type.pointer? || obj_type.reference_like?
@@ -601,10 +620,30 @@ module Crystal
       node
     end
 
+    def transform(node : StructDef)
+      type = node.type as CStructType
+      if type.vars.empty?
+        node.raise "empty structs are disallowed"
+      end
+      node
+    end
+
+    def transform(node : UnionDef)
+      type = node.type as CUnionType
+      if type.vars.empty?
+        node.raise "empty unions are disallowed"
+      end
+      node
+    end
+
     def rebind_node(node, dependency)
       node.unbind_from node.dependencies?
       if dependency
-        node.bind_to dependency
+        if dependency.type?
+          node.bind_to dependency
+        else
+          node.set_type(nil)
+        end
       else
         node.bind_to @program.nil_var
       end

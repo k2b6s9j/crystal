@@ -203,7 +203,7 @@ module IO
   def flush
   end
 
-  def self.pipe
+  def self.pipe(read_blocking=false, write_blocking=false)
     ifdef darwin || linux
       status = LibC.pipe(out pipe_fds)
     elsif windows
@@ -213,7 +213,7 @@ module IO
       raise Errno.new("Could not create pipe")
     end
 
-    {FileDescriptorIO.new(pipe_fds[0]), FileDescriptorIO.new(pipe_fds[1])}
+    {FileDescriptorIO.new(pipe_fds[0], read_blocking), FileDescriptorIO.new(pipe_fds[1], write_blocking)}
   end
 
   def self.pipe
@@ -404,6 +404,17 @@ module IO
     ByteIterator.new(self)
   end
 
+  def self.copy(src, dst)
+    buffer :: UInt8[1024]
+    count = 0
+    while (len = src.read(buffer.to_slice).to_i32) > 0
+      dst.write(buffer.to_slice, len)
+      count += len
+    end
+    len < 0 ? len : count
+  end
+
+  # :nodoc:
   struct LineIterator(I)
     include Iterator(String)
 
@@ -420,6 +431,7 @@ module IO
     end
   end
 
+  # :nodoc:
   struct CharIterator(I)
     include Iterator(Char)
 
@@ -436,6 +448,7 @@ module IO
     end
   end
 
+  # :nodoc:
   struct ByteIterator(I)
     include Iterator(UInt8)
 
@@ -463,13 +476,15 @@ def read_line(delimiter = '\n' : Char)
   STDIN.read_line(delimiter)
 end
 
-def print(obj)
-  STDOUT.print obj
+def print(*objects : Object)
+  objects.each do |obj|
+    STDOUT.print obj
+  end
   nil
 end
 
-def print!(obj)
-  print obj
+def print!(*objects : Object)
+  print *objects
   STDOUT.flush
   nil
 end
@@ -492,8 +507,10 @@ def sprintf(format_string, args : Array | Tuple)
   end
 end
 
-def puts(obj)
-  STDOUT.puts obj
+def puts(*objects : Object)
+  objects.each do |obj|
+    STDOUT.puts obj
+  end
   nil
 end
 

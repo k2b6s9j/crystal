@@ -412,17 +412,29 @@ class Crystal::Call
   end
 
   def check_tuple_indexer(owner, def_name, args, arg_types)
-    if owner.is_a?(TupleInstanceType) && def_name == "[]" && args.length == 1
-      arg = args.first
-      if arg.is_a?(NumberLiteral) && arg.kind == :i32
-        index = arg.value.to_i
-        if 0 <= index < owner.tuple_types.length
-          indexer_def = owner.tuple_indexer(index)
-          indexer_match = Match.new(indexer_def, arg_types, MatchContext.new(owner, owner))
-          return Matches.new([indexer_match] of Match, true)
-        else
-          raise "index out of bounds for tuple #{owner}"
-        end
+    return unless args.length == 1 && def_name == "[]"
+
+    if owner.is_a?(TupleInstanceType)
+      tuple_indexer_helper(args, arg_types, owner, owner) do |instance_type, index|
+        instance_type.tuple_indexer(index)
+      end
+    elsif owner.metaclass? && (instance_type = owner.instance_type).is_a?(TupleInstanceType)
+      tuple_indexer_helper(args, arg_types, owner, instance_type) do |instance_type, index|
+        instance_type.tuple_metaclass_indexer(index)
+      end
+    end
+  end
+
+  def tuple_indexer_helper(args, arg_types, owner, instance_type)
+    arg = args.first
+    if arg.is_a?(NumberLiteral) && arg.kind == :i32
+      index = arg.value.to_i
+      if 0 <= index < instance_type.tuple_types.length
+        indexer_def = yield instance_type, index
+        indexer_match = Match.new(indexer_def, arg_types, MatchContext.new(owner, owner))
+        return Matches.new([indexer_match] of Match, true)
+      else
+        raise "index out of bounds for tuple #{owner}"
       end
     end
     nil
@@ -564,7 +576,13 @@ class Crystal::Call
     if !macros && node_scope.metaclass? && node_scope.instance_type.module?
       macros = yield mod.object.metaclass
     end
+
     macros ||= yield mod
+
+    if !macros && (location = self.location) && (filename = location.filename).is_a?(String) && (file_module = mod.file_module(filename))
+      macros ||= yield file_module
+    end
+
     macros
   end
 
@@ -750,9 +768,12 @@ class Crystal::Call
   end
 
   private def void_return_type?(match_context, output)
-    return false unless output.is_a?(Path)
+    if output.is_a?(Path)
+      type = match_context.type_lookup.lookup_type(output)
+    else
+      type = output
+    end
 
-    type = match_context.type_lookup.lookup_type(output)
     type.is_a?(Type) && type.void?
   end
 

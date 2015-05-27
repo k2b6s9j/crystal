@@ -60,6 +60,7 @@
 # ```
 struct Tuple
   include Enumerable(typeof((i = 0; self[i])))
+  include Iterable
   include Comparable(Tuple)
 
   # Creates a tuple that will contain the given arguments.
@@ -132,6 +133,16 @@ struct Tuple
     yield
   end
 
+  # Returns a tuple populated with the elements at the given indexes.
+  # Raises if any index is invalid.
+  #
+  # ```
+  # {"a", "b", "c", "d"}.values_at(0, 2) #=> {"a", "c"}
+  # ```
+  def values_at(*indexes : Int)
+    indexes.map {|index| self[index] }
+  end
+
   # Yields each of the elements in this tuple.
   #
   # ```
@@ -153,6 +164,15 @@ struct Tuple
       yield self[{{i}}]
     {% end %}
     self
+  end
+
+  # Returns an `Iterator` for the elements in this tuple.
+  #
+  # ```
+  # {1, 'a'}.each.cycle.take(3).to_a #=> [1, 'a', 1]
+  # ```
+  def each
+    ItemIterator(typeof((i = 0; self[i]))).new(self)
   end
 
   # Returns `true` if this tuple has the same length as the other tuple
@@ -298,5 +318,62 @@ struct Tuple
     io << "{"
     join ", ", io, &.inspect(io)
     io << "}"
+  end
+
+  # Returns a new tuple where elements are mapped by the given block.
+  #
+  # ```
+  # tuple = {1, 2.5, "a"}
+  # tuple.map &.to_s #=> {"1", "2.5", "a"}
+  # ```
+  def map
+    {% if true %}
+      Tuple.new(
+        {% for i in 0 ... @length %}
+          (yield self[{{i}}]),
+        {% end %}
+      )
+   {% end %}
+  end
+
+  # Returns the first element of this tuple. Doesn't compile
+  # if the tuple is empty.
+  #
+  # ```
+  # tuple = {1, 2.5}
+  # tuple.first #=> 1
+  # ```
+  def first
+    self[0]
+  end
+
+  # Returns the last element of this tuple. Raises if this
+  # tuple is empty (this will change to a compile error
+  # in the future).
+  #
+  # ```
+  # tuple = {1, 2.5}
+  # tuple.last #=> 2.5
+  # ```
+  def last
+    self[length - 1]
+  end
+
+  class ItemIterator(T)
+    include Iterator(T)
+
+    def initialize(@tuple, @index = 0)
+    end
+
+    def next
+      value = @tuple.at(@index) { stop }
+      @index += 1
+      value
+    end
+
+    def rewind
+      @index = 0
+      self
+    end
   end
 end

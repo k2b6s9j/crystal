@@ -396,14 +396,10 @@ module Crystal
       old_needs_value = @needs_value
       @needs_value = false
 
-      expressions_length = node.expressions.length
+      last_index = node.expressions.length - 1
       node.expressions.each_with_index do |exp, i|
-        breaks = exp.no_returns? || exp.returns? || exp.breaks? || (exp.yields? && (block_returns? || block_breaks?))
-        if old_needs_value && (breaks || i == expressions_length - 1)
-          @needs_value = true
-        end
+        @needs_value = true if old_needs_value && i == last_index
         accept exp
-        break if breaks
       end
 
       @needs_value = old_needs_value
@@ -656,13 +652,14 @@ module Crystal
         return false
       end
 
+      # This means it's an instance variable initialize of a generic type
+      return unless target.type?
+
       request_value do
         accept value
       end
 
-      if value.no_returns? || value.returns? || value.breaks? || (value.yields? && (block_returns? || block_breaks?))
-        return
-      end
+      return if value.no_returns?
 
       target_type = target.type
 
@@ -797,7 +794,7 @@ module Crystal
       last_value = @last
 
       obj_type = node.obj.type
-      to_type = node.to.type.instance_type
+      to_type = node.to.type
 
       if to_type.pointer?
         if obj_type.nil_type?
@@ -1403,7 +1400,7 @@ module Crystal
       end
       memset @last, int8(0), struct_type.size
       type_ptr = @last
-      run_instance_vars_initializers(type, type_ptr)
+      run_instance_vars_initializers(type, type, type_ptr)
       @last = type_ptr
     end
 
@@ -1416,18 +1413,24 @@ module Crystal
       struct_type
     end
 
-    def run_instance_vars_initializers(type, type_ptr)
-      return unless type.is_a?(ClassType)
+    def run_instance_vars_initializers(real_type, type : GenericClassInstanceType, type_ptr)
+      run_instance_vars_initializers(real_type, type.generic_class, type_ptr)
+    end
 
+    def run_instance_vars_initializers(real_type, type : InheritedGenericClass, type_ptr)
+      run_instance_vars_initializers real_type, type.extended_class, type_ptr
+    end
+
+    def run_instance_vars_initializers(real_type, type : ClassType | GenericClassType, type_ptr)
       if superclass = type.superclass
-        run_instance_vars_initializers(superclass, type_ptr)
+        run_instance_vars_initializers(real_type, superclass, type_ptr)
       end
 
       initializers = type.instance_vars_initializers
       return unless initializers
 
       initializers.each do |init|
-        ivar = type.lookup_instance_var(init.name)
+        ivar = real_type.lookup_instance_var(init.name)
         value = init.value
 
         # Don't need to initialize false
@@ -1446,10 +1449,14 @@ module Crystal
 
           value.accept self
 
-          ivar_ptr = instance_var_ptr type, init.name, type_ptr
+          ivar_ptr = instance_var_ptr real_type, init.name, type_ptr
           assign ivar_ptr, ivar.type, value.type, @last
         end
       end
+    end
+
+    def run_instance_vars_initializers(real_type, type : Type, type_ptr)
+      # Nothing to do
     end
 
     def malloc(type)
@@ -1561,14 +1568,6 @@ module Crystal
 
     def accept(node)
       node.accept self
-    end
-
-    def block_returns?
-      context.block_returns?
-    end
-
-    def block_breaks?
-      context.block_breaks?
     end
 
     def visit(node : ASTNode)

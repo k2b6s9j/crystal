@@ -92,32 +92,143 @@ describe "String" do
     end
   end
 
-  it "does to_i" do
-    "1234".to_i.should eq(1234)
-  end
+  describe "to_i" do
+    assert { "1234".to_i.should eq(1234) }
+    assert { "   +1234   ".to_i.should eq(1234) }
+    assert { "   -1234   ".to_i.should eq(-1234) }
+    assert { "   +1234   ".to_i.should eq(1234) }
+    assert { "   -00001234".to_i.should eq(-1234) }
+    assert { "1_234".to_i(underscore: true).should eq(1234) }
+    assert { "1101".to_i(base: 2).should eq(13) }
+    assert { "12ab".to_i(16).should eq(4779) }
+    assert { "0x123abc".to_i(prefix: true).should eq(1194684) }
+    assert { "0b1101".to_i(prefix: true).should eq(13) }
+    assert { "0b001101".to_i(prefix: true).should eq(13) }
+    assert { "0123".to_i(prefix: true).should eq(83) }
+    assert { "123hello".to_i(strict: false).should eq(123) }
+    assert { "99 red balloons".to_i(strict: false).should eq(99) }
+    assert { "   99 red balloons".to_i(strict: false).should eq(99) }
+    assert { expect_raises(ArgumentError) { "hello".to_i } }
+    assert { expect_raises(ArgumentError) { "1__234".to_i } }
+    assert { expect_raises(ArgumentError) { "1_234".to_i } }
+    assert { expect_raises(ArgumentError) { "   1234   ".to_i(whitespace: false) } }
+    assert { expect_raises(ArgumentError) { "0x123".to_i } }
+    assert { expect_raises(ArgumentError) { "0b123".to_i } }
+    assert { expect_raises(ArgumentError) { "000b123".to_i(prefix: true) } }
+    assert { expect_raises(ArgumentError) { "000x123".to_i(prefix: true) } }
+    assert { expect_raises(ArgumentError) { "123hello".to_i } }
 
-  it "does to_i with base" do
-    "12ab".to_i(16).should eq(4779)
-  end
+    describe "to_i8" do
+      assert { "127".to_i8.should eq(127) }
+      assert { "-128".to_i8.should eq(-128) }
+      assert { expect_raises(ArgumentError) { "128".to_i8 } }
+      assert { expect_raises(ArgumentError) { "-129".to_i8 } }
 
-  it "raises on to_i(1)" do
-    expect_raises { "12ab".to_i(1) }
-  end
+      assert { "127".to_i8?.should eq(127) }
+      assert { "128".to_i8?.should be_nil }
+      assert { "128".to_i8 { 0 }.should eq(0) }
 
-  it "raises on to_i(37)" do
-    expect_raises { "12ab".to_i(37) }
-  end
+      assert { expect_raises(ArgumentError) { "18446744073709551616".to_i8 } }
+    end
 
-  it "does to_i32" do
-    "1234".to_i32.should eq(1234)
-  end
+    describe "to_u8" do
+      assert { "255".to_u8.should eq(255) }
+      assert { "0".to_u8.should eq(0) }
+      assert { expect_raises(ArgumentError) { "256".to_u8 } }
+      assert { expect_raises(ArgumentError) { "-1".to_u8 } }
 
-  it "does to_i64" do
-    "1234123412341234".to_i64.should eq(1234123412341234_i64)
-  end
+      assert { "255".to_u8?.should eq(255) }
+      assert { "256".to_u8?.should be_nil }
+      assert { "256".to_u8 { 0 }.should eq(0) }
 
-  it "does to_u64" do
-    "9223372036854775808".to_u64.should eq(9223372036854775808_u64)
+      assert { expect_raises(ArgumentError) { "18446744073709551616".to_u8 } }
+    end
+
+    describe "to_i16" do
+      assert { "32767".to_i16.should eq(32767) }
+      assert { "-32768".to_i16.should eq(-32768) }
+      assert { expect_raises(ArgumentError) { "32768".to_i16 } }
+      assert { expect_raises(ArgumentError) { "-32769".to_i16 } }
+
+      assert { "32767".to_i16?.should eq(32767) }
+      assert { "32768".to_i16?.should be_nil }
+      assert { "32768".to_i16 { 0 }.should eq(0) }
+
+      assert { expect_raises(ArgumentError) { "18446744073709551616".to_i16 } }
+    end
+
+    describe "to_u16" do
+      assert { "65535".to_u16.should eq(65535) }
+      assert { "0".to_u16.should eq(0) }
+      assert { expect_raises(ArgumentError) { "65536".to_u16 } }
+      assert { expect_raises(ArgumentError) { "-1".to_u16 } }
+
+      assert { "65535".to_u16?.should eq(65535) }
+      assert { "65536".to_u16?.should be_nil }
+      assert { "65536".to_u16 { 0 }.should eq(0) }
+
+      assert { expect_raises(ArgumentError) { "18446744073709551616".to_u16 } }
+    end
+
+    describe "to_i32" do
+      assert { "2147483647".to_i32.should eq(2147483647) }
+      assert { "-2147483648".to_i32.should eq(-2147483648) }
+      assert { expect_raises(ArgumentError) { "2147483648".to_i32 } }
+      assert { expect_raises(ArgumentError) { "-2147483649".to_i32 } }
+
+      assert { "2147483647".to_i32?.should eq(2147483647) }
+      assert { "2147483648".to_i32?.should be_nil }
+      assert { "2147483648".to_i32 { 0 }.should eq(0) }
+
+      assert { expect_raises(ArgumentError) { "18446744073709551616".to_i32 } }
+    end
+
+    describe "to_u32" do
+      assert { "4294967295".to_u32.should eq(4294967295) }
+      assert { "0".to_u32.should eq(0) }
+      assert { expect_raises(ArgumentError) { "4294967296".to_u32 } }
+      assert { expect_raises(ArgumentError) { "-1".to_u32 } }
+
+      assert { "4294967295".to_u32?.should eq(4294967295) }
+      assert { "4294967296".to_u32?.should be_nil }
+      assert { "4294967296".to_u32 { 0 }.should eq(0) }
+
+      assert { expect_raises(ArgumentError) { "18446744073709551616".to_u32 } }
+    end
+
+    describe "to_i64" do
+      assert { "9223372036854775807".to_i64.should eq(9223372036854775807) }
+      assert { "-9223372036854775808".to_i64.should eq(-9223372036854775808) }
+      assert { expect_raises(ArgumentError) { "9223372036854775808".to_i64 } }
+      assert { expect_raises(ArgumentError) { "-9223372036854775809".to_i64 } }
+
+      assert { "9223372036854775807".to_i64?.should eq(9223372036854775807) }
+      assert { "9223372036854775808".to_i64?.should be_nil }
+      assert { "9223372036854775808".to_i64 { 0 }.should eq(0) }
+
+      assert { expect_raises(ArgumentError) { "18446744073709551616".to_i64 } }
+    end
+
+    describe "to_u64" do
+      assert { "18446744073709551615".to_u64.should eq(18446744073709551615) }
+      assert { "0".to_u64.should eq(0) }
+      assert { expect_raises(ArgumentError) { "18446744073709551616".to_u64 } }
+      assert { expect_raises(ArgumentError) { "-1".to_u64 } }
+
+      assert { "18446744073709551615".to_u64?.should eq(18446744073709551615) }
+      assert { "18446744073709551616".to_u64?.should be_nil }
+      assert { "18446744073709551616".to_u64 { 0 }.should eq(0) }
+    end
+
+    assert { "1234".to_i32.should eq(1234) }
+    assert { "1234123412341234".to_i64.should eq(1234123412341234_i64) }
+    assert { "9223372036854775808".to_u64.should eq(9223372036854775808_u64) }
+
+    assert { expect_raises { "12ab".to_i(1) } }
+    assert { expect_raises { "12ab".to_i(37) } }
+
+    assert { expect_raises { "1Y2P0IJ32E8E7".to_i(36) } }
+    assert { "1Y2P0IJ32E8E7".to_i64(36).should eq(9223372036854775807) }
   end
 
   it "does to_f" do
@@ -940,5 +1051,29 @@ describe "String" do
 
   it "cycles bytes" do
     "abc".each_byte.cycle.take(8).join.should eq("9798999798999798")
+  end
+
+  it "gets lines" do
+    "foo".lines.should eq(["foo"])
+    "foo\nbar\nbaz\n".lines.should eq(["foo\n", "bar\n", "baz\n"])
+  end
+
+  it "gets each_line" do
+    lines = [] of String
+    "foo\n\nbar\nbaz\n".each_line do |line|
+      lines << line
+    end
+    lines.should eq(["foo\n", "\n", "bar\n", "baz\n"])
+  end
+
+  it "gets each_line iterator" do
+    iter = "foo\nbar\nbaz\n".each_line
+    iter.next.should eq("foo\n")
+    iter.next.should eq("bar\n")
+    iter.next.should eq("baz\n")
+    iter.next.should be_a(Iterator::Stop)
+
+    iter.rewind
+    iter.next.should eq("foo\n")
   end
 end

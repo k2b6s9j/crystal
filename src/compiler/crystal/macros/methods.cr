@@ -89,38 +89,121 @@ module Crystal
     def interpret(method, args, block, interpreter)
       case method
       when ">"
-        compare_to(args.first) { |me, other| me > other }
+        bool_bin_op(method, args) { |me, other| me > other }
       when ">="
-        compare_to(args.first) { |me, other| me >= other }
+        bool_bin_op(method, args) { |me, other| me >= other }
       when "<"
-        compare_to(args.first) { |me, other| me < other }
+        bool_bin_op(method, args) { |me, other| me < other }
       when "<="
-        compare_to(args.first) { |me, other| me <= other }
+        bool_bin_op(method, args) { |me, other| me <= other }
       when "<=>"
-        other = args.first
-        unless other.is_a?(NumberLiteral)
-          raise "can't compare number to #{other}"
+        num_bin_op(method, args) { |me, other| me <=> other }
+      when "+"
+        if args.empty?
+          self
+        else
+          num_bin_op(method, args) { |me, other| me + other }
         end
-        NumberLiteral.new(to_number <=> other.to_number)
+      when "-"
+        if args.empty?
+          num = to_number
+          if num.is_a?(UnsignedInt)
+            raise "undefined method '-' for unsigned integer literal: #{self}"
+          else
+            NumberLiteral.new(-num)
+          end
+        else
+          num_bin_op(method, args) { |me, other| me - other }
+        end
+      when "*"
+        num_bin_op(method, args) { |me, other| me * other }
+      when "/"
+        num_bin_op(method, args) { |me, other| me / other }
+      when "**"
+        num_bin_op(method, args) { |me, other| me ** other }
+      when "%"
+        int_bin_op(method, args) { |me, other| me % other }
+      when "&"
+        int_bin_op(method, args) { |me, other| me & other }
+      when "|"
+        int_bin_op(method, args) { |me, other| me | other }
+      when "^"
+        int_bin_op(method, args) { |me, other| me ^ other }
+      when "<<"
+        int_bin_op(method, args) { |me, other| me << other }
+      when ">>"
+        int_bin_op(method, args) { |me, other| me >> other }
+      when "~"
+        if args.empty?
+          num = to_number
+          if num.is_a?(Int)
+            NumberLiteral.new(~num)
+          else
+            raise "undefined method '~' for float literal: #{self}"
+          end
+        else
+          raise "wrong number of arguments for NumberLiteral#~ (#{args.length} for 0)"
+        end
       else
         super
       end
-    end
-
-    def compare_to(other)
-      unless other.is_a?(NumberLiteral)
-        raise "can't compare number to #{other}"
-      end
-
-      BoolLiteral.new(yield to_number, other.to_number)
     end
 
     def interpret_compare(other : NumberLiteral)
       to_number <=> other.to_number
     end
 
+    def bool_bin_op(op, args)
+      BoolLiteral.new(bin_op(op, args) { |me, other| yield me, other })
+    end
+
+    def num_bin_op(op, args)
+      NumberLiteral.new(bin_op(op, args) { |me, other| yield me, other })
+    end
+
+    def int_bin_op(op, args)
+      if @kind == :f32 || @kind == :f64
+        raise "undefined method '#{op}' for float literal: #{self}"
+      end
+
+      NumberLiteral.new(bin_op(op, args) { |me, other|
+        other_kind = (args.first as NumberLiteral).kind
+        if other_kind == :f32 || other_kind == :f64
+          raise "argument to NumberLiteral##{op} can't be float literal: #{self}"
+        end
+
+        yield me.to_i, other.to_i
+      })
+    end
+
+    def bin_op(op, args)
+      if args.length != 1
+        raise "wrong number of arguments for NumberLiteral##{op} (#{args.length} for 1)"
+      end
+
+      other = args.first
+      unless other.is_a?(NumberLiteral)
+        raise "can't #{op} with #{other}"
+      end
+
+      yield(to_number, other.to_number)
+    end
+
     def to_number
-      @value.to_f64
+      case @kind
+      when :i8 then @value.to_i8
+      when :i16 then @value.to_i16
+      when :i32 then @value.to_i32
+      when :i64 then @value.to_i64
+      when :u8 then @value.to_u8
+      when :u16 then @value.to_u16
+      when :u32 then @value.to_u32
+      when :u64 then @value.to_u64
+      when :f32 then @value.to_f32
+      when :f64 then @value.to_f64
+      else
+        raise "Unknown kind: #{@kind}"
+      end
     end
   end
 
@@ -153,7 +236,7 @@ module Crystal
           when RegexLiteral
             arg_value = arg.value
             if arg_value.is_a?(StringLiteral)
-              regex = Regex.new(arg_value.value, arg.modifiers)
+              regex = Regex.new(arg_value.value, arg.options)
             else
               raise "regex interpolations not yet allowed in macros"
             end
@@ -203,7 +286,7 @@ module Crystal
 
           regex_value = first.value
           if regex_value.is_a?(StringLiteral)
-            regex = Regex.new(regex_value.value, first.modifiers)
+            regex = Regex.new(regex_value.value, first.options)
           else
             raise "regex interpolations not yet allowed in macros"
           end
@@ -304,7 +387,7 @@ module Crystal
         interpret_argless_method(method, args) { BoolLiteral.new(elements.empty?) }
       when "find"
         interpret_argless_method(method, args) do
-          raise "select expects a block" unless block
+          raise "find expects a block" unless block
 
           block_arg = block.args.first?
 
@@ -346,6 +429,8 @@ module Crystal
             interpreter.accept(block.body).truthy?
           end)
         end
+      when "shuffle"
+        ArrayLiteral.new(elements.shuffle)
       when "sort"
         ArrayLiteral.new(elements.sort { |x, y| x.interpret_compare(y) })
       when "uniq"
@@ -368,8 +453,6 @@ module Crystal
         else
           raise "wrong number of arguments for [] (#{args.length} for 1)"
         end
-      when "shuffle"
-        ArrayLiteral.new(elements.shuffle)
       else
         super
       end
@@ -461,7 +544,7 @@ module Crystal
     def interpret(method, args, block, interpreter)
       case method
       when "name"
-        interpret_argless_method(method, args) { StringLiteral.new(@name) }
+        interpret_argless_method(method, args) { MacroId.new(@name) }
       when "type"
         interpret_argless_method(method, args) do
           if type = @type
@@ -480,7 +563,7 @@ module Crystal
     def interpret(method, args, block, interpreter)
       case method
       when "body"
-        interpret_argless_method(method, args) { @body || Nop.new }
+        interpret_argless_method(method, args) { @body }
       when "args"
         interpret_argless_method(method, args) do
           ArrayLiteral.map(@args) { |arg| MacroId.new(arg.name) }
@@ -576,7 +659,7 @@ module Crystal
       when "abstract?"
         interpret_argless_method(method, args) { BoolLiteral.new(type.abstract) }
       when "name"
-        interpret_argless_method(method, args) { StringLiteral.new(type.to_s) }
+        interpret_argless_method(method, args) { MacroId.new(type.to_s) }
       when "instance_vars"
         interpret_argless_method(method, args) { TypeNode.instance_vars(type) }
       when "superclass"
@@ -600,6 +683,15 @@ module Crystal
             raise "argument to has_attribtue? must be a StringLiteral or SymbolLiteral, not #{arg.class_desc}"
           end
           BoolLiteral.new(type.has_attribute?(value))
+        end
+      when "length"
+        interpret_argless_method(method, args) do
+          type = type.instance_type
+          if type.is_a?(TupleInstanceType)
+            NumberLiteral.new(type.tuple_types.length)
+          else
+            raise "undefined method 'length' for TypeNode of type #{type} (must be a tuple type)"
+          end
         end
       else
         super

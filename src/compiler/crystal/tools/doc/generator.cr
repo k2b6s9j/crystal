@@ -48,8 +48,11 @@ class Crystal::Doc::Generator
 
   def copy_files
     Dir.mkdir_p "#{@dir}#{File::SEPARATOR}css"
+    Dir.mkdir_p "#{@dir}#{File::SEPARATOR}js"
+
     write_template "#{@dir}#{File::SEPARATOR}index.html", IndexTemplate.new
     write_template "#{@dir}#{File::SEPARATOR}css#{File::SEPARATOR}style.css", StyleTemplate.new
+    write_template "#{@dir}#{File::SEPARATOR}js#{File::SEPARATOR}type.js", JsTypeTemplate.new
   end
 
   def generate_list(types)
@@ -239,19 +242,18 @@ class Crystal::Doc::Generator
     return unless  $?.success?
 
     remotes.lines.each do |line|
-      next unless line =~ /github\.com(?:\:|\/)((?:\w|-|_)+)\/((?:\w|-|_)+)/
+      if line =~ /github\.com(?:\:|\/)((?:\w|-|_)+)\/((?:\w|-|_)+)/
+        user, repo = $1, $2
+        rev = `git rev-parse HEAD`.chomp
 
-      user, repo = $1, $2
-      rev = `git rev-parse HEAD`.chomp
+        @repository = "https://github.com/#{user}/#{repo}/blob/#{rev}"
 
-      @repository = "https://github.com/#{user}/#{repo}/blob/#{rev}"
+        if user == "manastech" && repo == "crystal"
+          @is_crystal_repository = true
+        end
 
-      if user == "manastech" && repo == "crystal"
-        @is_crystal_repository = true
+        break
       end
-
-      # TODO: this was 'break', but it breaks because of #494
-      return
     end
   end
 

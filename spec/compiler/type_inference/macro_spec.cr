@@ -194,7 +194,7 @@ describe "Type inference: macro" do
         end
 
         macro def ivars_length : Int32
-          {{@instance_vars.length}}
+          {{@type.instance_vars.length}}
         end
       end
 
@@ -383,6 +383,16 @@ describe "Type inference: macro" do
       end
 
       Foo.new.foo
+      )) { int32 }
+  end
+
+  it "doesn't die on && inside if (bug)" do
+    assert_type(%(
+      macro foo
+        1 && 2
+      end
+
+      foo ? 3 : 4
       )) { int32 }
   end
 end

@@ -716,6 +716,20 @@ describe "Block inference" do
       )) { int32 }
   end
 
+  it "ignores void return type (3) (#427)" do
+    assert_type(%(
+      alias Alias = Int32 -> Void
+
+      def foo &block : Alias
+        yield 1
+      end
+
+      foo do
+        1
+      end
+      )) { int32 }
+  end
+
   it "uses block return type as return type, even if can't infer block type" do
     assert_type(%(
       class Foo
@@ -885,5 +899,20 @@ describe "Block inference" do
       end
       ),
       "can't declare class inside block"
+  end
+
+  it "doesn't assign block variable type to last value (#694)" do
+    assert_type(%(
+      def foo
+        yield 1
+      end
+
+      z = 1
+      foo do |x|
+        z = x
+        x = "a"
+      end
+      z
+      )) { int32 }
   end
 end

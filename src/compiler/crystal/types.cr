@@ -1319,6 +1319,8 @@ module Crystal
       end
 
       instance = self.new_generic_instance(program, self, instance_type_vars)
+      run_instance_vars_initializers self, self, instance
+
       generic_types[type_vars] = instance
       initialize_instance instance
 
@@ -1332,6 +1334,28 @@ module Crystal
       end
 
       instance
+    end
+
+    def run_instance_vars_initializers(real_type, type : GenericClassType | ClassType, instance)
+      if superclass = type.superclass
+        run_instance_vars_initializers(real_type, superclass, instance)
+      end
+
+      type.instance_vars_initializers.try &.each do |initializer|
+        visitor = TypeVisitor.new(program, vars: initializer.meta_vars, meta_vars: initializer.meta_vars)
+        value = initializer.value.clone
+        value.accept visitor
+        instance_var = instance.lookup_instance_var(initializer.name)
+        instance_var.bind_to(value)
+      end
+    end
+
+    def run_instance_vars_initializers(real_type, type : InheritedGenericClass, instance)
+      run_instance_vars_initializers real_type, type.extended_class, instance
+    end
+
+    def run_instance_vars_initializers(real_type, type, instance)
+      # Nothing
     end
 
     def initialize_instance(instance)
@@ -1711,14 +1735,23 @@ module Crystal
     getter tuple_types
 
     def initialize(program, @tuple_types)
-      @tuple_indexers = {} of Int32 => Def
       var = Var.new("T", self)
       var.bind_to var
       super(program, program.tuple, {"T" => var} of String => ASTNode)
     end
 
     def tuple_indexer(index)
-      @tuple_indexers[index] ||= begin
+      indexers = @tuple_indexers ||= {} of Int32 => Def
+      tuple_indexer(indexers, index)
+    end
+
+    def tuple_metaclass_indexer(index)
+      indexers = @tuple_metaclass_indexers ||= {} of Int32 => Def
+      tuple_indexer(indexers, index)
+    end
+
+    private def tuple_indexer(indexers, index)
+      indexers[index] ||= begin
         indexer = Def.new("[]", [Arg.new("index")], TupleIndexer.new(index))
         indexer.owner = self
         indexer
@@ -1727,6 +1760,10 @@ module Crystal
 
     def var
       type_vars["T"]
+    end
+
+    def primitive_like?
+      true
     end
 
     def reference_like?
@@ -1739,14 +1776,6 @@ module Crystal
 
     def allocated
       true
-    end
-
-    def instance_type
-      program.tuple.instantiate tuple_types.map(&.instance_type)
-    end
-
-    def metaclass
-      program.tuple.instantiate tuple_types.map(&.metaclass)
     end
 
     def has_in_type_vars?(type)

@@ -59,6 +59,58 @@ describe UnbufferedChannel do
     spawn { ch1.send 123 }
     Channel.select(ch1, ch2).should eq(ch1)
   end
+
+  it "can send an receive nil" do
+    ch = UnbufferedChannel(Nil).new
+    spawn { ch.send nil }
+    Scheduler.yield
+    ch.ready?.should be_true
+    ch.receive.should be_nil
+    ch.ready?.should be_false
+  end
+
+  it "can be closed" do
+    ch = UnbufferedChannel(Int32).new
+    ch.closed?.should be_false
+    ch.close
+    ch.closed?.should be_true
+    expect_raises(ChannelClosed) { ch.receive }
+  end
+
+  it "can be closed after sending" do
+    ch = UnbufferedChannel(Int32).new
+    spawn { ch.send 123; ch.close }
+    ch.receive.should eq(123)
+    expect_raises(ChannelClosed) { ch.receive }
+  end
+
+  it "can be closed from different fiber" do
+    ch = UnbufferedChannel(Int32).new
+    received = false
+    spawn { expect_raises(ChannelClosed) { ch.receive }; received = true }
+    Scheduler.yield
+    ch.close
+    Scheduler.yield
+    received.should be_true
+  end
+
+  it "cannot send if closed" do
+    ch = UnbufferedChannel(Int32).new
+    ch.close
+    expect_raises(ChannelClosed) { ch.send 123 }
+  end
+
+  it "can receive? when closed" do
+    ch = UnbufferedChannel(Int32).new
+    ch.close
+    ch.receive?.should be_nil
+  end
+
+  it "can receive? when not empty" do
+    ch = UnbufferedChannel(Int32).new
+    spawn { ch.send 123 }
+    ch.receive?.should eq(123)
+  end
 end
 
 describe BufferedChannel do
@@ -108,5 +160,57 @@ describe BufferedChannel do
     ch2 = BufferedChannel(Int32).new
     spawn { ch1.send 123 }
     Channel.select(ch1, ch2).should eq(ch1)
+  end
+
+  it "can send an receive nil" do
+    ch = BufferedChannel(Nil).new
+    spawn { ch.send nil }
+    Scheduler.yield
+    ch.ready?.should be_true
+    ch.receive.should be_nil
+    ch.ready?.should be_false
+  end
+
+  it "can be closed" do
+    ch = BufferedChannel(Int32).new
+    ch.closed?.should be_false
+    ch.close
+    ch.closed?.should be_true
+    expect_raises(ChannelClosed) { ch.receive }
+  end
+
+  it "can be closed after sending" do
+    ch = BufferedChannel(Int32).new
+    spawn { ch.send 123; ch.close }
+    ch.receive.should eq(123)
+    expect_raises(ChannelClosed) { ch.receive }
+  end
+
+  it "can be closed from different fiber" do
+    ch = BufferedChannel(Int32).new
+    received = false
+    spawn { expect_raises(ChannelClosed) { ch.receive }; received = true }
+    Scheduler.yield
+    ch.close
+    Scheduler.yield
+    received.should be_true
+  end
+
+  it "cannot send if closed" do
+    ch = BufferedChannel(Int32).new
+    ch.close
+    expect_raises(ChannelClosed) { ch.send 123 }
+  end
+
+  it "can receive? when closed" do
+    ch = BufferedChannel(Int32).new
+    ch.close
+    ch.receive?.should be_nil
+  end
+
+  it "can receive? when not empty" do
+    ch = BufferedChannel(Int32).new
+    spawn { ch.send 123 }
+    ch.receive?.should eq(123)
   end
 end

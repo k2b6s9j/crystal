@@ -40,6 +40,7 @@ ifdef darwin || linux
     fun unwind_get_language_specific_data = _Unwind_GetLanguageSpecificData(context : Void*) : UInt8*
   end
 
+  # :nodoc:
   struct LEBReader
     def initialize(@data : UInt8*)
     end

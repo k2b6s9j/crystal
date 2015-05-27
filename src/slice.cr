@@ -1,5 +1,6 @@
 struct Slice(T)
   include Enumerable(T)
+  include Iterable
 
   getter length
 
@@ -77,7 +78,7 @@ struct Slice(T)
   end
 
   def each
-    Iterator(T).new(self)
+    ItemIterator(T).new(self)
   end
 
   def pointer(length)
@@ -115,6 +116,19 @@ struct Slice(T)
     end
   end
 
+  def rindex(value)
+    rindex { |elem| elem == value }
+  end
+
+  def rindex
+    (length - 1).downto(0) do |i|
+      if yield @pointer[i]
+        return i
+      end
+    end
+    nil
+  end
+
   private def to_hex(c)
     ((c < 10 ? 48_u8 : 87_u8) + c)
   end
@@ -140,8 +154,9 @@ struct Slice(T)
     @pointer
   end
 
-  class Iterator(T)
-    include ::Iterator(T)
+  # :nodoc:
+  class ItemIterator(T)
+    include Iterator(T)
 
     def initialize(@slice : ::Slice(T), @index = 0)
     end

@@ -584,7 +584,7 @@ describe "Code gen: class" do
     run(%(
       class Class
         macro def name : String
-          {{ @class_name }}
+          {{ @type.name.stringify }}
         end
 
         def foo
@@ -610,6 +610,6 @@ describe "Code gen: class" do
       class D < C; end
       ptr.value = D
       ptr.value.foo
-      )).to_string.should eq("D:Class")
+      )).to_string.should eq("D")
   end
 end

@@ -137,33 +137,33 @@ describe "Lexer macro" do
     token.type.should eq(:MACRO_END)
   end
 
-    it "lexes macro with nested abstract def" do
-      lexer = Lexer.new(%(hello\n  abstract def {{world}} end end))
+  it "lexes macro with nested abstract def" do
+    lexer = Lexer.new(%(hello\n  abstract def {{world}} end end))
 
-      token = lexer.next_macro_token(Token::MacroState.default, false)
-      token.type.should eq(:MACRO_LITERAL)
-      token.value.should eq("hello\n  abstract def ")
-      token.macro_state.nest.should eq(0)
+    token = lexer.next_macro_token(Token::MacroState.default, false)
+    token.type.should eq(:MACRO_LITERAL)
+    token.value.should eq("hello\n  abstract def ")
+    token.macro_state.nest.should eq(0)
 
-      token = lexer.next_macro_token(token.macro_state, false)
-      token.type.should eq(:MACRO_EXPRESSION_START)
+    token = lexer.next_macro_token(token.macro_state, false)
+    token.type.should eq(:MACRO_EXPRESSION_START)
 
-      token_before_expression = token.clone
+    token_before_expression = token.clone
 
-      token = lexer.next_token
-      token.type.should eq(:IDENT)
-      token.value.should eq("world")
+    token = lexer.next_token
+    token.type.should eq(:IDENT)
+    token.value.should eq("world")
 
-      lexer.next_token.type.should eq(:"}")
-      lexer.next_token.type.should eq(:"}")
+    lexer.next_token.type.should eq(:"}")
+    lexer.next_token.type.should eq(:"}")
 
-      token = lexer.next_macro_token(token_before_expression.macro_state, false)
-      token.type.should eq(:MACRO_LITERAL)
-      token.value.should eq(" ")
+    token = lexer.next_macro_token(token_before_expression.macro_state, false)
+    token.type.should eq(:MACRO_LITERAL)
+    token.value.should eq(" ")
 
-      token = lexer.next_macro_token(token.macro_state, false)
-      token.type.should eq(:MACRO_END)
-    end
+    token = lexer.next_macro_token(token.macro_state, false)
+    token.type.should eq(:MACRO_END)
+  end
 
   it "reaches end" do
     lexer = Lexer.new(%(fail))
@@ -319,11 +319,57 @@ describe "Lexer macro" do
 
     token = lexer.next_macro_token(Token::MacroState.default, false)
     token.type.should eq(:MACRO_LITERAL)
+    token.value.should eq("# end")
+    token.line_number.should eq(1)
+
+    token = lexer.next_macro_token(Token::MacroState.default, false)
+    token.type.should eq(:MACRO_LITERAL)
     token.value.should eq("\n day ")
-    token.line_number.should eq(2)
+    token.line_number.should eq(1)
 
     token = lexer.next_macro_token(token.macro_state, false)
     token.type.should eq(:MACRO_END)
+    token.line_number.should eq(2)
+  end
+
+  it "lexes macro with comments and expressions" do
+    lexer = Lexer.new("good # {{name}} end\n day end")
+
+    token = lexer.next_macro_token(Token::MacroState.default, false)
+    token.type.should eq(:MACRO_LITERAL)
+    token.value.should eq("good ")
+
+    token = lexer.next_macro_token(token.macro_state, false)
+    token.type.should eq(:MACRO_LITERAL)
+    token.value.should eq("# ")
+    token.macro_state.comment.should be_true
+
+    token = lexer.next_macro_token(token.macro_state, false)
+    token.type.should eq(:MACRO_EXPRESSION_START)
+
+    token_before_expression = token.clone
+    token_before_expression.macro_state.comment.should be_true
+
+    token = lexer.next_token
+    token.type.should eq(:IDENT)
+    token.value.should eq("name")
+
+    lexer.next_token.type.should eq(:"}")
+    lexer.next_token.type.should eq(:"}")
+
+    token = lexer.next_macro_token(token_before_expression.macro_state, false)
+    token.type.should eq(:MACRO_LITERAL)
+    token.value.should eq(" end")
+    token.macro_state.comment.should be_false
+
+    token = lexer.next_macro_token(token.macro_state, false)
+    token.type.should eq(:MACRO_LITERAL)
+    token.value.should eq("\n day ")
+    token.line_number.should eq(1)
+
+    token = lexer.next_macro_token(token.macro_state, false)
+    token.type.should eq(:MACRO_END)
+    token.line_number.should eq(2)
   end
 
   it "lexes macro with curly escape" do
@@ -445,5 +491,31 @@ describe "Lexer macro" do
 
     token = lexer.next_macro_token(token.macro_state, false)
     token.type.should eq(:MACRO_END)
+  end
+
+  it "lexes macro with embedded char and sharp" do
+    lexer = Lexer.new(%(good '#' day end))
+
+    token = lexer.next_macro_token(Token::MacroState.default, false)
+    token.type.should eq(:MACRO_LITERAL)
+    token.value.should eq(%(good '#' day ))
+
+    token = lexer.next_macro_token(token.macro_state, false)
+    token.type.should eq(:MACRO_END)
+  end
+
+  it "lexes bug #654" do
+    lexer = Lexer.new(%(l {{op}} end))
+
+    token = lexer.next_macro_token(Token::MacroState.default, false)
+    token.type.should eq(:MACRO_LITERAL)
+    token.value.should eq("l ")
+
+    token = lexer.next_macro_token(token.macro_state, false)
+    token.type.should eq(:MACRO_EXPRESSION_START)
+
+    token = lexer.next_token
+    token.type.should eq(:IDENT)
+    token.value.should eq("op")
   end
 end
