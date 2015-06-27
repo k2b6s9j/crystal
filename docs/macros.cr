@@ -5,6 +5,12 @@
 # are documented on the classes in this module. Additionaly, methods of the
 # `Macros` module are top-level methods that you can invoke, like `puts` and `run`.
 module Macros
+  # Outputs the current macro's buffer to the standard output. Useful for debugging
+  # a macro to see what's being generated. Use it like `{{debug()}}`, the parenthesis
+  # are mandatory.
+  def debug : Nop
+  end
+
   # Gets the value of an environment variable at compile-time, or `nil` if it doesn't exist.
   def env(name) : StringLiteral | NilLiteral
   end
@@ -1006,6 +1012,24 @@ module Macros
     # Returns the number of elements in this tuple type or tuple metaclass type.
     # Gives a compile error if this is not one of those types.
     def length : NumberLiteral
+    end
+
+    # Returns true if this type is a union type, false otherwise.
+    #
+    # See also: `union_types`.
+    def union? : BoolLiteral
+    end
+
+    # Returns the types comforming a union type, if this is a union type.
+    # Gives a compile error otherwise.
+    #
+    # See also: `union?`.
+    def union_types : ArrayLiteral(TypeNode)
+    end
+
+    # Returns the type parameters of the generic type. If the type is not
+    # generic, an empty array is returned.
+    def type_params : ArrayLiteral(TypeNode)
     end
   end
 end

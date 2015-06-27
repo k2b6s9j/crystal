@@ -143,11 +143,12 @@ module Crystal
       if const_node = @const_being_initialized
         const_being_initialized = const_node.target_const.not_nil!
 
-        if !@program.initialized_global_vars.includes?(node.name) &&
-           !const_being_initialized.value.type?.try &.includes_type?(@program.nil)
-          const_being_initialized = const_node.target_const.not_nil!
-          const_node.raise "constant #{const_being_initialized} requires initialization of #{node}, \
-                                      which is initialized later. Initialize #{node} before #{const_being_initialized}"
+        if !@program.initialized_global_vars.includes?(node.name)
+          global_var = @program.global_vars[node.name]
+          if global_var.type?.try { |t| !t.includes_type?(@program.nil) }
+            const_node.raise "constant #{const_being_initialized} requires initialization of #{node}, \
+                                        which is initialized later. Initialize #{node} before #{const_being_initialized}"
+          end
         end
       end
 
@@ -334,6 +335,10 @@ module Crystal
 
     def check_args_are_not_closure(node, message)
       node.args.each do |arg|
+        if arg.is_a?(Call) && (expanded = arg.expanded)
+          arg = expanded
+        end
+
         case arg
         when FunLiteral
           if arg.def.closure

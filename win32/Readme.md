@@ -10,7 +10,7 @@ Building Crystal with MinGW-w64
 ```
     cd path_to_your_crystal_folder
     mkdir .build
-    bin\crystal build src\compiler\crystal.cr -o .build\crystal`
+    bin\crystal build src\compiler\crystal.cr -o .build\crystal
 ```
 
 You can also add `path_to_your_crystal_folder\bin` to your _PATH_ and invoke crystal directly with `crystal hello_world.cr`.

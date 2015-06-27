@@ -155,6 +155,14 @@ module Crystal
 
                 here_end = current_pos
                 is_here  = false
+                while true
+                  char = peek_next_char
+                  if char != ' '
+                    break
+                  else
+                    next_char
+                  end
+                end
                 here.each_char do |c|
                   char = next_char
                   unless char == c
@@ -1316,6 +1324,9 @@ module Crystal
       case peek_next_char
       when 'x'
         scan_hex_number(start, negative)
+      when 'o'
+        next_char
+        scan_octal_number(start, negative)
       when 'b'
         scan_bin_number(start, negative)
       when '.'
@@ -1436,6 +1447,13 @@ module Crystal
       else
         @token.number_kind = :i32
         deduce_integer_kind string_value, name_length, negative, start
+      end
+
+      first_byte = @reader.string.byte_at(start)
+      if first_byte == '+'.ord
+        string_value = "+#{string_value}"
+      elsif first_byte == '-'.ord && num == 0
+        string_value = "-0"
       end
 
       @token.type = :NUMBER

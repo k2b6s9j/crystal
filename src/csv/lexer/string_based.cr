@@ -1,3 +1,4 @@
+# :nodoc:
 class CSV::Lexer::StringBased < CSV::Lexer
   def initialize(string)
     super()
@@ -6,6 +7,10 @@ class CSV::Lexer::StringBased < CSV::Lexer
       @line_number += 1
       @column_number = 0
     end
+  end
+
+  def rewind
+    @reader.pos = 0
   end
 
   private def consume_unquoted_cell

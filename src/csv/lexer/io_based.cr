@@ -1,7 +1,13 @@
+# :nodoc:
 class CSV::Lexer::IOBased < CSV::Lexer
   def initialize(io)
     super()
     @io = io
+    @current_char = @io.read_char || '\0'
+  end
+
+  def rewind
+    @io.rewind
     @current_char = @io.read_char || '\0'
   end
 

@@ -16,17 +16,43 @@ class Regex
 
   getter source
 
-  # TODO: remove this constructor after 0.7.1
-  def self.new(source, options : Int32)
-    new source, Options.new(options)
-  end
+  def initialize(source, @options = Options::None : Options)
+    # PCRE's pattern must have their null characters escaped
+    source = source.gsub('\u{0}', "\\0")
+    @source = source
 
-  def initialize(@source, @options = Options::None : Options)
     @re = LibPCRE.compile(@source, (options | Options::UTF_8 | Options::NO_UTF8_CHECK).value, out errptr, out erroffset, nil)
     raise ArgumentError.new("#{String.new(errptr)} at #{erroffset}") if @re.nil?
     @extra = LibPCRE.study(@re, 0, out studyerrptr)
     raise ArgumentError.new("#{String.new(studyerrptr)}") if @extra.nil? && studyerrptr
     LibPCRE.full_info(@re, nil, LibPCRE::INFO_CAPTURECOUNT, out @captures)
+  end
+
+  # TODO: remove this constructor after 0.7.3
+  def self.new(source, options : Int32)
+    new source, Options.new(options)
+  end
+
+  def name_table
+    LibPCRE.full_info(@re, @extra, LibPCRE::INFO_NAMECOUNT,     out name_count)
+    LibPCRE.full_info(@re, @extra, LibPCRE::INFO_NAMEENTRYSIZE, out name_entry_size)
+    table_pointer = Pointer(UInt8).null
+    LibPCRE.full_info(@re, @extra, LibPCRE::INFO_NAMETABLE, pointerof(table_pointer) as Pointer(Int32))
+    name_table = table_pointer.to_slice(name_entry_size*name_count)
+
+    lookup = Hash(UInt16,String).new
+
+    name_count.times do |i|
+      capture_offset = i * name_entry_size
+      capture_number = (name_table[capture_offset].to_u16 << 8) | name_table[capture_offset+1].to_u16
+
+      name_offset = capture_offset + 2
+      name = String.new( (name_table + name_offset).pointer(name_entry_size-3) )
+
+      lookup[capture_number] = name
+    end
+
+    lookup
   end
 
   def options
@@ -45,7 +71,7 @@ class Regex
 
   def match_at_byte_index(str, byte_index = 0, options = Regex::Options::None)
     ovector_size = (@captures + 1) * 3
-    ovector = Pointer(Int32).malloc(ovector_size * 4)
+    ovector = Pointer(Int32).malloc(ovector_size)
     ret = LibPCRE.exec(@re, @extra, str, str.bytesize, byte_index, (options | Options::NO_UTF8_CHECK).value, ovector, ovector_size)
     if ret > 0
       match = MatchData.new(self, @re, str, byte_index, ovector, @captures)
@@ -75,6 +101,10 @@ class Regex
     to_s io
   end
 
+  def ==(other : Regex)
+    source == other.source && options == other.options
+  end
+
   def self.escape(str)
     String.build do |result|
       str.each_byte do |byte|
@@ -88,6 +118,22 @@ class Regex
           result.write_byte byte
         end
       end
+    end
+  end
+
+  # Determines Regex's source validity. If it is, `nil` is returned.
+  # If it's not, a String containing the error message is returned.
+  #
+  # ```
+  # Regex.error("(foo|bar)") #=> nil
+  # Regex.error("(foo|bar") #=> "missing ) at 8"
+  # ```
+  def self.error?(source)
+    re = LibPCRE.compile(source, (Options::UTF_8 | Options::NO_UTF8_CHECK).value, out errptr, out erroffset, nil)
+    if re
+      nil
+    else
+      "#{String.new(errptr)} at #{erroffset}"
     end
   end
 end

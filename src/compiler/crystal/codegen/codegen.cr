@@ -437,6 +437,8 @@ module Crystal
       method_type = context.return_type.not_nil!
       if method_type.void?
         ret
+      elsif method_type.no_return?
+        unreachable
       else
         value = upcast(@last, method_type, type)
         ret to_rhs(value, method_type)
@@ -680,6 +682,10 @@ module Crystal
               # Can't assign void
               return if target.type.void?
 
+              # If assigning to a special variable in a method that yields,
+              # assign to that variable too.
+              check_assign_to_special_var_in_block(target, value)
+
               var = context.vars[target.name]?
               if var
                 target_type = var.type
@@ -695,6 +701,13 @@ module Crystal
       emit_debug_metadata node, store_instruction if @debug
 
       false
+    end
+
+    def check_assign_to_special_var_in_block(target, value)
+      if (block_context = context.block_context?) && target.special_var?
+        var = block_context.vars[target.name]
+        assign var.pointer, var.type, value.type, @last
+      end
     end
 
     def get_global(node, name, type)
@@ -940,7 +953,11 @@ module Crystal
         if @last.constant?
           global.initializer = @last
           global.global_constant = true
-          const.initializer = @last if const.value.type.is_a?(PrimitiveType)
+
+          const_type = const.value.type
+          if const_type.is_a?(PrimitiveType) || const_type.is_a?(EnumType)
+            const.initializer = @last
+          end
         else
           if const.value.type.passed_by_value?
             global.initializer = llvm_type(const.value.type).undef
@@ -1098,7 +1115,7 @@ module Crystal
         codegen_call_or_invoke(node, nil, nil, raise_fun, [bit_cast(unwind_ex_obj, raise_fun.params.first.type)], true, @mod.no_return)
       end
 
-      if node_ensure
+      if node_ensure && !@builder.end
         old_last = @last
         accept node_ensure
         @last = old_last

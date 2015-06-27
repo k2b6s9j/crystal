@@ -47,7 +47,7 @@ end
 # "\u0041" # == "A"
 # ```
 #
-# Or you can use curly braces and specify up to four hexadecimal numbers:
+# Or you can use curly braces and specify up to six hexadecimal numbers (0 to 10FFFF):
 #
 # ```text
 # "\u{41}" # == "A"
@@ -608,8 +608,7 @@ class String
   # as character indices. Indices can be negative to start
   # counting from the end of the string.
   #
-  # This method never raises: at most, the whole string or the empty
-  # string will be returned.
+  # Raises `IndexOutOfBounds` if the range's start is not in range.
   #
   # ```
   # "hello"[0..2]  # "hel"
@@ -624,38 +623,62 @@ class String
     to += length if to < 0
     to -= 1 if range.excludes_end?
     length = to - from + 1
+    length = 0 if length < 0
     self[from, length]
   end
 
+  # Returns a substring starting from the `start` character
+  # of length `count`.
+  #
+  # The `start` argument can be negative to start counting
+  # from the end of the string.
+  #
+  # Raises `IndexOutOfBounds` if `start` isn't in range.
+  #
+  # Raises `ArgumentError` if `count` is negative.
   def [](start : Int, count : Int)
     if single_byte_optimizable?
       return byte_slice(start, count)
     end
 
-    return "" if count <= 0
+    start += length if start < 0
 
     start_pos = nil
     end_pos = nil
 
     reader = CharReader.new(self)
-    reader.each_with_index do |char, i|
+    i = 0
+
+    reader.each_with_index do |char|
       if i == start
         start_pos = reader.pos
-      elsif i == start + count
+      elsif count >= 0 && i == start + count
         end_pos = reader.pos
+        i += 1
+        break
       end
+      i += 1
     end
 
     end_pos ||= reader.pos
 
     if start_pos
+      raise ArgumentError.new "negative count" if count < 0
+      return "" if count == 0
+
       count = end_pos - start_pos
       String.new(count) do |buffer|
         buffer.copy_from(cstr + start_pos, count)
         {count, 0}
       end
+    elsif start == i
+      if count >= 0
+        return ""
+      else
+        raise ArgumentError.new "negative count"
+      end
     else
-      ""
+      raise IndexOutOfBounds.new
     end
   end
 
@@ -710,20 +733,28 @@ class String
   end
 
   def byte_slice(start : Int, count : Int)
-    return "" if count <= 0
-
     start += bytesize if start < 0
-    count = bytesize - start if start + count > bytesize
     single_byte_optimizable = single_byte_optimizable?
 
     if 0 <= start < bytesize
+      raise ArgumentError.new "negative count" if count < 0
+
+      count = bytesize - start if start + count > bytesize
+      return "" if count == 0
+
       String.new(count) do |buffer|
         buffer.copy_from(cstr + start, count)
         slice_length = single_byte_optimizable ? count : 0
         {count, slice_length}
       end
+    elsif start == bytesize
+      if count >= 0
+        return ""
+      else
+        raise ArgumentError.new "negative count"
+      end
     else
-      ""
+      raise IndexOutOfBounds.new
     end
   end
 
@@ -802,6 +833,38 @@ class String
       end
     when '\r'.ord
       byte_slice 0, bytesize - 1
+    else
+      self
+    end
+  end
+
+  def chomp(char : Char)
+    if ends_with?(char)
+      count = 0
+      char.each_byte do |byte|
+        count += 1
+      end
+      String.new(unsafe_byte_slice(0, bytesize - count))
+    else
+      self
+    end
+  end
+
+  def chomp(string : String)
+    if string.empty?
+      return self if empty?
+
+      pos = bytesize - 1
+      while pos > 0 && cstr[pos] == '\n'.ord
+        if pos > 1 && cstr[pos - 1] == '\r'.ord
+          pos -= 2
+        else
+          pos -= 1
+        end
+      end
+      String.new(unsafe_byte_slice(0, pos + 1))
+    elsif ends_with?(string)
+      String.new(unsafe_byte_slice(0, bytesize - string.bytesize))
     else
       self
     end
@@ -926,24 +989,34 @@ class String
   # ```
   # "hello".gsub(/./) {|s| s[0].ord.to_s + ' '} #=> #=> "104 101 108 108 111 "
   # ```
-  def gsub(pattern : Regex, &block : String, MatchData -> _)
+  def gsub(pattern : Regex)
     byte_offset = 0
     match = pattern.match_at_byte_index(self, byte_offset)
     return self unless match
+
+    last_byte_offset = 0
 
     String.build(bytesize) do |buffer|
       while match
         index = match.byte_begin(0)
 
-        buffer.write unsafe_byte_slice(byte_offset, index - byte_offset)
+        buffer.write unsafe_byte_slice(last_byte_offset, index - last_byte_offset)
         str = match[0]
         buffer << yield str, match
-        byte_offset = index + str.bytesize
+
+        if str.bytesize == 0
+          byte_offset = index + 1
+          last_byte_offset = index
+        else
+          byte_offset = index + str.bytesize
+          last_byte_offset = byte_offset
+        end
+
         match = pattern.match_at_byte_index(self, byte_offset)
       end
 
-      if byte_offset < bytesize
-        buffer.write unsafe_byte_slice(byte_offset)
+      if last_byte_offset < bytesize
+        buffer.write unsafe_byte_slice(last_byte_offset)
       end
     end
   end
@@ -995,15 +1068,26 @@ class String
     index = self.byte_index(string, byte_offset)
     return self unless index
 
+    last_byte_offset = 0
+
     String.build(bytesize) do |buffer|
       while index
-        buffer.write unsafe_byte_slice(byte_offset, index - byte_offset)
+        buffer.write unsafe_byte_slice(last_byte_offset, index - last_byte_offset)
         buffer << yield string
-        byte_offset = index + string.bytesize
+
+        if string.bytesize == 0
+          byte_offset = index + 1
+          last_byte_offset = index
+        else
+          byte_offset = index + string.bytesize
+          last_byte_offset = byte_offset
+        end
+
         index = self.byte_index(string, byte_offset)
       end
-      if byte_offset < bytesize
-        buffer.write unsafe_byte_slice(byte_offset)
+
+      if last_byte_offset < bytesize
+        buffer.write unsafe_byte_slice(last_byte_offset)
       end
     end
   end
@@ -1482,6 +1566,7 @@ class String
     end
 
     ary = Array(String).new
+    count = 0
     match_offset = 0
     slice_offset = 0
     last_slice_offset = 0
@@ -1498,6 +1583,11 @@ class String
       else
         ary.push byte_slice(slice_offset, slice_length)
       end
+      count += 1
+
+      1.upto(match.length) do |i|
+        ary.push match[i]
+      end
 
       last_slice_offset = slice_offset
 
@@ -1508,7 +1598,7 @@ class String
         match_offset = index + match_bytesize
         slice_offset = match_offset
       end
-      break if limit && ary.length + 1 == limit
+      break if limit && count + 1 == limit
       break if slice_offset > bytesize
     end
 

@@ -177,19 +177,20 @@ describe "Lexer" do
   it_lexes_number :f64, ["1.0f64", "1.0"]
 
   it_lexes_number :i32, ["0b1010", "10"]
-  it_lexes_number :i32, ["+0b1010", "10"]
+  it_lexes_number :i32, ["+0b1010", "+10"]
   it_lexes_number :i32, ["-0b1010", "-10"]
 
   it_lexes_number :i32, ["0xFFFF", "65535"]
   it_lexes_number :i32, ["0xabcdef", "11259375"]
-  it_lexes_number :i32, ["+0xFFFF", "65535"]
+  it_lexes_number :i32, ["+0xFFFF", "+65535"]
   it_lexes_number :i32, ["-0xFFFF", "-65535"]
 
   it_lexes_number :u64, ["0xFFFF_u64", "65535"]
 
-  it_lexes_i32 [["0123", "83"], ["-0123", "-83"], ["+0123", "83"]]
+  it_lexes_i32 [["0123", "83"], ["-0123", "-83"], ["+0123", "+83"]]
+  it_lexes_i32 [["0o123", "83"], ["-0o123", "-83"], ["+0o123", "+83"]]
   it_lexes_f64 [["0.5", "0.5"], ["+0.5", "+0.5"], ["-0.5", "-0.5"]]
-  it_lexes_i64 [["0123_i64", "83"], ["0x1_i64", "1"], ["0b1_i64", "1"]]
+  it_lexes_i64 [["0123_i64", "83"], ["0o123_i64", "83"], ["0x1_i64", "1"], ["0b1_i64", "1"]]
 
   it_lexes_i64 ["2147483648", "-2147483649", "-9223372036854775808"]
   it_lexes_i64 [["2147483648.foo", "2147483648"]]
@@ -197,6 +198,9 @@ describe "Lexer" do
   it_lexes_u64 ["18446744073709551615", "18446744073709551615", "14146167139683460000"]
   it_lexes_i64 [["0x3fffffffffffffff", "4611686018427387903"]]
   it_lexes_u64 [["0xffffffffffffffff", "18446744073709551615"]]
+
+  it_lexes_number :i32, ["+0", "+0"]
+  it_lexes_number :i32, ["-0", "-0"]
 
   it_lexes_char "'a'", 'a'
   it_lexes_char "'\\b'", 8.chr
@@ -260,6 +264,7 @@ describe "Lexer" do
 
   assert_syntax_error "0xFF_i8", "255 doesn't fit in an Int8"
   assert_syntax_error "0200_i8", "128 doesn't fit in an Int8"
+  assert_syntax_error "0o200_i8", "128 doesn't fit in an Int8"
   assert_syntax_error "0b10000000_i8", "128 doesn't fit in an Int8"
 
   it "lexes not instance var" do

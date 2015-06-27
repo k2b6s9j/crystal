@@ -8,6 +8,7 @@ lib LibC
     fun getpid : Int32
     fun getppid : Int32
     fun waitpid(pid : Int32, stat_loc : Int32*, options : Int32) : Int32
+    fun kill(pid : Int32, signal : Int32) : Int32
 
     ifdef x86_64
       ClockT = UInt64
@@ -45,6 +46,22 @@ module Process
 
   def self.pid
     LibC.getpid()
+  end
+
+  def self.getpgid(pid : Int32)
+    ret = LibC.getpgid(pid)
+    raise Errno.new(ret) if ret < 0
+    ret
+  end
+
+  ifdef darwin || linux
+    def self.kill(signal : Signal, *pids : Int)
+      pids.each do |pid|
+        ret = LibC.kill(pid.to_i32, signal.value)
+        raise Errno.new(ret) if ret < 0
+      end
+      0
+    end
   end
 
   def self.ppid

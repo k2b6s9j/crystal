@@ -48,12 +48,33 @@ describe "StringIO" do
     io = StringIO.new
     io.puts "foo"
     io.to_s.should eq("foo\n")
+
+    io = StringIO.new
+    io.puts
+    io.to_s.should eq("\n")
+  end
+
+  it "puts several arguments" do
+    io = StringIO.new
+    io.puts(1, "aaa", "\n")
+    lines = io.each_line
+
+    lines.next.should eq("1\n")
+    lines.next.should eq("aaa\n")
+    lines.next.should eq("\n")
+    lines.next.should be_a(Iterator::Stop)
   end
 
   it "print" do
     io = StringIO.new
     io.print "foo"
     io.to_s.should eq("foo")
+  end
+
+  it "prints several arguments" do
+    io = StringIO.new
+    io.print "foo", "bar", "baz"
+    io.to_s.should eq("foobarbaz")
   end
 
   it "reads single line content" do
@@ -74,6 +95,25 @@ describe "StringIO" do
     io.gets('r').should eq("or")
     io.gets('r').should eq("ld")
     io.gets('r').should eq(nil)
+  end
+
+  it "gets with string as delimiter" do
+    io = StringIO.new("hello world")
+    io.gets("lo").should eq("hello")
+    io.gets("rl").should eq(" worl")
+    io.gets("foo").should eq("d")
+  end
+
+  it "gets with empty string as delimiter" do
+    io = StringIO.new("hello\nworld\n")
+    io.gets("").should eq("hello\nworld\n")
+  end
+
+  it "gets with single byte string as delimiter" do
+    io = StringIO.new("hello\nworld\nbye")
+    io.gets("\n").should eq("hello\n")
+    io.gets("\n").should eq("world\n")
+    io.gets("\n").should eq("bye")
   end
 
   it "reads all remaining content" do
@@ -105,12 +145,6 @@ describe "StringIO" do
     io.gets.should eq("foobar")
   end
 
-  it "does puts" do
-    io = StringIO.new
-    io.puts
-    io.to_s.should eq("\n")
-  end
-
   it "read chars from UTF-8 string" do
     io = StringIO.new("há日本語")
     io.read_char.should eq('h')
@@ -138,7 +172,7 @@ describe "StringIO" do
     counter.should eq(3)
   end
 
-  it "writes an array of btyes" do
+  it "writes an array of bytes" do
     str = String.build do |io|
       bytes = ['a'.ord.to_u8, 'b'.ord.to_u8]
       io.write bytes
@@ -175,5 +209,15 @@ describe "StringIO" do
     str = StringIO.new
     str.printf "Hello %d", [123]
     str.to_s.should eq("Hello 123")
+  end
+
+  it "can be converted to slice" do
+    str = StringIO.new
+    str.write_byte 0_u8
+    str.write_byte 1_u8
+    slice = str.to_slice
+    slice.length.should eq(2)
+    slice[0].should eq(0_u8)
+    slice[1].should eq(1_u8)
   end
 end

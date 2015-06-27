@@ -181,6 +181,8 @@ module Crystal
 
         @vars[var.name] = meta_var
         @meta_vars[var.name] = meta_var
+
+        check_exception_handler_vars(var.name, node)
       when InstanceVar
         type = scope? || current_type
         if @untyped_def
@@ -210,6 +212,15 @@ module Crystal
       end
 
       false
+    end
+
+    def check_exception_handler_vars(var_name, node)
+      # If inside a begin part of an exception handler, bind this type to
+      # the variable that will be used in the rescue/else blocks.
+      if exception_handler_vars = @exception_handler_vars
+        var = (exception_handler_vars[var_name] ||= MetaVar.new(var_name))
+        var.bind_to(node)
+      end
     end
 
     def visit(node : Out)
@@ -312,7 +323,12 @@ module Crystal
     end
 
     def lookup_class_var(node, bind_to_nil_if_non_existent = true)
-      class_var_owner = (@scope || current_type).class_var_owner as ClassVarContainer
+      scope = (@scope || current_type).class_var_owner
+      if scope.is_a?(GenericClassType) || scope.is_a?(GenericModuleType)
+        node.raise "can't use class variable with generic types, only with generic types instances"
+      end
+
+      class_var_owner = scope as ClassVarContainer
 
       bind_to_nil = bind_to_nil_if_non_existent && !class_var_owner.has_class_var?(node.name)
 
@@ -373,12 +389,7 @@ module Crystal
 
       @vars[var_name] = simple_var
 
-      # If inside a begin part of an exception handler, bind this type to
-      # the variable that will be used in the rescue/else blocks.
-      if exception_handler_vars = @exception_handler_vars
-        var = (exception_handler_vars[var_name] ||= MetaVar.new(var_name))
-        var.bind_to(value)
-      end
+      check_exception_handler_vars var_name, value
 
       if needs_type_filters?
         @type_filters = TypeFilters.and(TypeFilters.truthy(target), value_type_filters)
@@ -387,6 +398,11 @@ module Crystal
       if target.special_var?
         if typed_def = @typed_def
           typed_def.add_special_var(target.name)
+
+          # If we are in a call's block, define the special var in the block
+          if (call = @call) && call.block
+            call.parent_visitor.define_special_var(target.name, value)
+          end
         else
           node.raise "'#{var_name}' can't be assigned at the top level"
         end
@@ -671,6 +687,15 @@ module Crystal
       # Check re-assigned variables and bind them.
       bind_vars block_visitor.vars, node.vars
       bind_vars block_visitor.vars, node.after_vars, node.args
+
+      # Special vars, even if only assigned inside a block,
+      # must be inside the def's metavars.
+      meta_vars.each do |name, var|
+        if var.special_var?
+          new_var = @meta_vars[name] ||= new_meta_var(name)
+          new_var.bind_to(var)
+        end
+      end
 
       node.vars = meta_vars
 

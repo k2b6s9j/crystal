@@ -1,5 +1,3 @@
-require "./**"
-
 lib LibC
   struct TimeSpec
     tv_sec  : LibC::TimeT
@@ -61,7 +59,7 @@ struct Time
   protected property encoded
 
   def initialize
-    initialize Time.local_ticks
+    initialize Time.local_ticks, kind: Kind::Local
   end
 
   def initialize(ticks : Int, kind = Kind::Unspecified)
@@ -221,7 +219,13 @@ struct Time
   end
 
   def <=>(other : self)
-    ticks <=> other.ticks
+    if utc? && other.local?
+      self <=> other.to_utc
+    elsif local? && other.utc?
+      to_utc <=> other
+    else
+      ticks <=> other.ticks
+    end
   end
 
   def hash
@@ -252,6 +256,7 @@ struct Time
   def inspect(io : IO)
     TimeFormat.new("%F %T").format(self, io)
     io << " UTC" if utc?
+    TimeFormat.new(" %z").format(self, io) if local?
     io
   end
 
@@ -263,8 +268,8 @@ struct Time
     TimeFormat.new(format).format(self, io)
   end
 
-  def self.parse(time, pattern, kind=Time::Kind::Unspecified)
-    TimeFormat.new(pattern).parse(time, kind)
+  def self.parse(time, pattern, kind = Time::Kind::Unspecified)
+    TimeFormat.new(pattern, kind).parse(time)
   end
 
   # Returns the number of seconds since the Epoch
@@ -274,6 +279,22 @@ struct Time
 
   def to_f
     (ticks - UnixEpoch) / TimeSpan::TicksPerSecond.to_f
+  end
+
+  def to_utc
+    if utc?
+      self
+    else
+      Time.new(Time.compute_utc_ticks(ticks), Kind::Utc)
+    end
+  end
+
+  def to_local
+    if local?
+      self
+    else
+      Time.new(Time.compute_local_ticks(ticks), Kind::Local)
+    end
   end
 
   macro def_at(name)
@@ -422,6 +443,29 @@ struct Time
     end
   end
 
+  # Returns the local time offset in minutes relative to GMT.
+  #
+  # ```
+  # # Assume in Argentina, where it's GMT-3
+  # Time.local_offset_in_minutes #=> -180
+  # ```
+  def self.local_offset_in_minutes
+    LibC.gettimeofday(nil, out tzp)
+    -tzp.tz_minuteswest.to_i32
+  end
+
+  protected def self.compute_utc_ticks(ticks)
+    compute_ticks do |t, tp, tzp|
+      ticks + tzp.tz_minuteswest.to_i64 * TimeSpan::TicksPerMinute
+    end
+  end
+
+  protected def self.compute_local_ticks(ticks)
+    compute_ticks do |t, tp, tzp|
+      ticks - tzp.tz_minuteswest.to_i64 * TimeSpan::TicksPerMinute
+    end
+  end
+
   private def self.compute_ticks
     LibC.gettimeofday(out tp, out tzp)
     ticks = tp.tv_sec.to_i64 * TimeSpan::TicksPerSecond + tp.tv_usec.to_i64 * 10_i64
@@ -429,3 +473,6 @@ struct Time
     yield ticks, tp, tzp
   end
 end
+
+require "./**"
+

@@ -108,7 +108,7 @@ lib LibC
 end
 
 class File
-  class Stat
+  struct Stat
     def initialize(filename : String)
       ifdef darwin || linux
         status = LibC.stat(filename, out @stat)
@@ -152,17 +152,7 @@ class File
     end
 
     def mode
-      number = @stat.st_mode
-      omode  = 0
-      m      = 1
-
-      while number != 0
-        omode  += (number % 8).to_i * m
-        m      *= 10
-        number /= 8
-      end
-
-      omode
+      @stat.st_mode
     end
 
     def mtime
@@ -185,8 +175,25 @@ class File
       @stat.st_uid
     end
 
-    def inspect
-      "<File::Stat dev=%d ino=%s mode=%0s nlink=%s uid=%d gid=%d rdev=%d size=%d blksize=%d blocks=%d atime=%d mtime=%d ctime=%d>" % [dev, ino, mode, nlink, uid, gid, rdev, size, blksize, blocks, atime, mtime, ctime]
+    def inspect(io)
+      io << "#<File::Stat"
+      io << " dev=0x"
+      dev.to_s(16, io)
+      io << ", ino=" << ino
+      io << ", mode=0"
+      mode.to_s(8, io)
+      io << ", nlink=" << nlink
+      io << ", uid=" << uid
+      io << ", gid=" << gid
+      io << ", rdev=0x"
+      rdev.to_s(16, io)
+      io << ", size=" << size
+      io << ", blksize=" << blksize
+      io << ", blocks=" << blocks
+      io << ", atime=" << atime
+      io << ", mtime=" << mtime
+      io << ", ctime=" << ctime
+      io << ">"
     end
 
     def blockdev?
@@ -241,7 +248,6 @@ class File
       end
     end
 
-    # TODO: is @stat's time always UTC?
     private def time(value)
       Time.new value, Time::Kind::Utc
     end

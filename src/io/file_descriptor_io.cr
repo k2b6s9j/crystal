@@ -1,14 +1,20 @@
+ifdef windows
+  lib LibC
+    fun get_osfhandle = _get_osfhandle(fd : Int32) : IntT
+  end
+end
+
 class FileDescriptorIO
   include IO
 
-  SEEK_SET = LibC::SEEK_SET
-  SEEK_CUR = LibC::SEEK_CUR
-  SEEK_END = LibC::SEEK_END
+  SEEK_SET = 0
+  SEEK_CUR = 1
+  SEEK_END = 2
 
   private getter! readers
   private getter! writers
 
-  def initialize(@fd, blocking = ifdef darwin || linux; false; elsif windows; true; end)
+  def initialize(@fd, blocking = ifdef darwin || linux; false; elsif windows; true; end, @edge_triggerable = true)
     unless blocking
       ifdef darwin || linux
         before = LibC.fcntl(@fd, LibC::FCNTL::F_GETFL)
@@ -18,7 +24,9 @@ class FileDescriptorIO
         argp = 1_u32
         LibC.ioctlsocket(@fd, LibC::FIONBIO.to_i32, pointerof(argp))
       end
-      @event = Scheduler.create_fd_events(self)
+      if @edge_triggerable
+        @event = Scheduler.create_fd_events(self)
+      end
       @readers = [] of Fiber
       @writers = [] of Fiber
     end
@@ -31,7 +39,13 @@ class FileDescriptorIO
       if bytes_read == -1
         if LibC.errno == Errno::EAGAIN
           readers << Fiber.current
-          Scheduler.reschedule
+          if @edge_triggerable
+            Scheduler.reschedule
+          else
+            event = Scheduler.create_fd_read_event(self)
+            Scheduler.reschedule
+            Scheduler.destroy_fd_events(event)
+          end
         else
           raise Errno.new "Error reading file"
         end
@@ -60,7 +74,13 @@ class FileDescriptorIO
       if bytes_written == -1
         if LibC.errno == Errno::EAGAIN
           writers << Fiber.current
-          Scheduler.reschedule
+          if @edge_triggerable
+            Scheduler.reschedule
+          else
+            event = Scheduler.create_fd_write_event(self)
+            Scheduler.reschedule
+            Scheduler.destroy_fd_events(event)
+          end
           next
         else
           raise Errno.new "Error writing file"

@@ -250,6 +250,13 @@ module IO
     self << obj
   end
 
+  def print(*objects : _)
+    objects.each do |obj|
+      print obj
+    end
+    nil
+  end
+
   # Writes the given string to this IO followed by a newline character
   # unless the string already ends with one.
   def puts(string : String)
@@ -265,6 +272,13 @@ module IO
 
   def puts
     write_byte '\n'.ord.to_u8
+  end
+
+  def puts(*objects : _)
+    objects.each do |obj|
+      puts obj
+    end
+    nil
   end
 
   def printf(format_string, *args)
@@ -329,8 +343,12 @@ module IO
     end
   end
 
-  def gets(delimiter = '\n' : Char)
-    buffer = StringIO.new
+  def gets
+    gets '\n'
+  end
+
+  def gets(delimiter : Char)
+    buffer = String::Builder.new
     while true
       unless ch = read_char
         return buffer.empty? ? nil : buffer.to_s
@@ -342,7 +360,51 @@ module IO
     buffer.to_s
   end
 
-  def read_line(delimiter = '\n' : Char)
+  def gets(delimiter : String)
+    # Empty string: read all
+    if delimiter.empty?
+      return read
+    end
+
+    # One byte: use gets(Char)
+    if delimiter.bytesize == 1
+      return gets(delimiter.unsafe_byte_at(0).chr)
+    end
+
+    # One char: use gets(Char)
+    if delimiter.length == 1
+      return gets(delimiter[0])
+    end
+
+    # The 'hard' case: we read until we match the last byte,
+    # and then compare backwards
+    last_byte = delimiter.byte_at(delimiter.bytesize - 1)
+    total_bytes = 0
+
+    buffer = String::Builder.new
+    while true
+      unless byte = read_byte
+        return buffer.empty? ? nil : buffer.to_s
+      end
+      buffer.write_byte(byte)
+      total_bytes += 1
+
+      break if (byte == last_byte) &&
+               (buffer.bytesize >= delimiter.bytesize) &&
+               (buffer.buffer + total_bytes - delimiter.bytesize).memcmp(delimiter.to_unsafe, delimiter.bytesize) == 0
+    end
+    buffer.to_s
+  end
+
+  def read_line
+    read_line '\n'
+  end
+
+  def read_line(delimiter : Char)
+    gets(delimiter) || raise EOFError.new
+  end
+
+  def read_line(delimiter : String)
     gets(delimiter) || raise EOFError.new
   end
 
@@ -468,59 +530,3 @@ end
 
 require "./io/*"
 
-def gets(delimiter = '\n' : Char)
-  STDIN.gets(delimiter)
-end
-
-def read_line(delimiter = '\n' : Char)
-  STDIN.read_line(delimiter)
-end
-
-def print(*objects : Object)
-  objects.each do |obj|
-    STDOUT.print obj
-  end
-  nil
-end
-
-def print!(*objects : Object)
-  print *objects
-  STDOUT.flush
-  nil
-end
-
-def printf(format_string, *args)
-  printf format_string, args
-end
-
-def printf(format_string, args : Array | Tuple)
-  STDOUT.printf format_string, args
-end
-
-def sprintf(format_string, *args)
-  sprintf format_string, args
-end
-
-def sprintf(format_string, args : Array | Tuple)
-  String.build(format_string.bytesize) do |str|
-    String::Formatter.new(format_string, args, str).format
-  end
-end
-
-def puts(*objects : Object)
-  objects.each do |obj|
-    STDOUT.puts obj
-  end
-  nil
-end
-
-def puts
-  STDOUT.puts
-  nil
-end
-
-def p(obj)
-  obj.inspect(STDOUT)
-  puts
-  obj
-end

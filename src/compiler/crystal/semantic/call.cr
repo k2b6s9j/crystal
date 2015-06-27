@@ -159,13 +159,13 @@ class Crystal::Call
   end
 
   def lookup_matches_in(owner : NonGenericModuleType, arg_types)
+    attach_subclass_observer owner
+
     including_types = owner.including_types
     if including_types
-      attach_subclass_observer owner
-
       lookup_matches_in(including_types, arg_types)
     else
-      raise "no type includes #{owner}"
+      [] of Def
     end
   end
 
@@ -262,7 +262,14 @@ class Crystal::Call
           return lookup_matches_in_union_metaclass(instance_type, arg_types)
         end
 
-        raise_matches_not_found(matches.owner || owner, def_name, matches)
+        # If the owner is abstract type without subclasses,
+        # or if the owner is an abstract generic instance type,
+        # don't give error. This is to allow small code comments without giving
+        # compile errors, which will anyway appear once you add concrete
+        # subclasses and instances.
+        unless owner.abstract && (owner.leaf? || owner.is_a?(GenericClassInstanceType))
+          raise_matches_not_found(matches.owner || owner, def_name, matches)
+        end
       end
     end
 

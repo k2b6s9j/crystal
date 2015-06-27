@@ -195,6 +195,7 @@ describe "Parser" do
   it_parses "2 * (3 + 4)", Call.new(2.int32, "*", Expressions.new([Call.new(3.int32, "+", 4.int32)] of ASTNode))
   it_parses "1/2", Call.new(1.int32, "/", [2.int32] of ASTNode)
   it_parses "1 + /foo/", Call.new(1.int32, "+", regex("foo"))
+  it_parses "1+0", Call.new(1.int32, "+", 0.int32)
   it_parses "a = 1; a /b", [Assign.new("a".var, 1.int32), Call.new("a".var, "/", "b".call)]
   it_parses "a = 1; a/b", [Assign.new("a".var, 1.int32), Call.new("a".var, "/", "b".call)]
   it_parses "a = 1; (a)/b", [Assign.new("a".var, 1.int32), Call.new(Expressions.new(["a".var] of ASTNode), "/", "b".call)]
@@ -1089,6 +1090,7 @@ describe "Parser" do
   assert_syntax_error "foo x: 1, x: 1", "duplicated named argument: x", 1, 11
   assert_syntax_error "def foo(x, x); end", "duplicated argument name: x", 1, 12
   assert_syntax_error "class Foo(T, T); end", "duplicated type var name: T", 1, 14
+  assert_syntax_error "->(x : Int32, x : Int32) {}", "duplicated argument name: x", 1, 15
 
   assert_syntax_error "Set {1, 2, 3} of Int32"
   assert_syntax_error "Hash {foo: 1} of Int32 => Int32"
@@ -1124,4 +1126,6 @@ describe "Parser" do
 
   assert_syntax_error "class Foo(Something); end", "type variables can only be single letters"
   assert_syntax_error "module Foo(Something); end", "type variables can only be single letters"
+
+  assert_syntax_error "/foo)/", "invalid regex"
 end
