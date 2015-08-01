@@ -84,7 +84,7 @@ class Hash(K, V)
       if block = @block
         block.call(self, key)
       else
-        raise MissingKey.new "Missing hash value: #{key.inspect}"
+        raise KeyError.new "Missing hash value: #{key.inspect}"
       end
     end
   end
@@ -247,9 +247,27 @@ class Hash(K, V)
     hash
   end
 
-  def merge!(other : Hash)
+  def merge(other : Hash(L, W), &block : K, V, W -> V | W)
+    hash = Hash(K | L, V | W).new
+    hash.merge! self
+    hash.merge!(other) { |k, v1, v2| yield k, v1, v2 }
+    hash
+  end
+
+  def merge!(other : Hash(K, V))
     other.each do |k, v|
       self[k] = v
+    end
+    self
+  end
+
+  def merge!(other : Hash(K, V), &block : K, V, V -> V)
+    other.each do |k, v|
+      if self.has_key?(k)
+        self[k] = yield k, self[k], v
+      else
+        self[k] = v
+      end
     end
     self
   end
@@ -284,7 +302,7 @@ class Hash(K, V)
   end
 
   def shift
-    shift { raise IndexOutOfBounds.new }
+    shift { raise IndexError.new }
   end
 
   def shift?
@@ -385,6 +403,14 @@ class Hash(K, V)
       insert_in_bucket_end index, entry
       entry = entry.fore
     end
+  end
+
+  def invert
+    hash = Hash(V, K).new
+    self.each do |k, v|
+      hash[v] = k
+    end
+    hash
   end
 
   protected def find_entry(key)

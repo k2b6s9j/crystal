@@ -38,14 +38,26 @@ class HTTP::Client
       exec {{method.upcase}}, path, headers, body
     end
 
+    def {{method.id}}(path, headers = nil, body = nil)
+      exec {{method.upcase}}, path, headers, body do |response|
+        yield response
+      end
+    end
+
     def self.{{method.id}}(url, headers = nil, body = nil)
       exec {{method.upcase}}, url, headers, body
+    end
+
+    def self.{{method.id}}(url, headers = nil, body = nil)
+      exec {{method.upcase}}, url, headers, body do |response|
+        yield response
+      end
     end
   {% end %}
 
   def post_form(path, form : String, headers = nil)
     headers ||= HTTP::Headers.new
-    headers["Content-Type"] = "application/x-www-form-urlencoded"
+    headers["Content-type"] = "application/x-www-form-urlencoded"
     post path, headers, form
   end
 
@@ -60,12 +72,34 @@ class HTTP::Client
   end
 
   def exec(request : HTTP::Request)
+    request.headers["User-agent"] ||= "Crystal"
     request.to_io(socket)
-    HTTP::Response.from_io(socket)
+    socket.flush
+    HTTP::Response.from_io(socket).tap do |response|
+      close unless response.keep_alive?
+    end
+  end
+
+  def exec(request : HTTP::Request, &block)
+    request.headers["User-agent"] ||= "Crystal"
+    request.to_io(socket)
+    socket.flush
+    HTTP::Response.from_io(socket) do |response|
+      value = yield response
+      response.body_io.try &.close
+      close unless response.keep_alive?
+      value
+    end
   end
 
   def exec(method : String, path, headers = nil, body = nil)
     exec new_request method, path, headers, body
+  end
+
+  def exec(method : String, path, headers = nil, body = nil)
+    exec(new_request(method, path, headers, body)) do |response|
+      yield response
+    end
   end
 
   def close
@@ -86,6 +120,7 @@ class HTTP::Client
 
   private def socket
     socket = @socket ||= TCPSocket.new @host, @port
+    socket.sync = false
     if @ssl
       @ssl_socket ||= OpenSSL::SSL::Socket.new(socket)
     else
@@ -113,11 +148,25 @@ class HTTP::Client
     end
   end
 
+  def self.exec(method, url, headers = nil, body = nil)
+    exec(url) do |client, path|
+      client.exec(method, path, headers, body) do |response|
+        yield response
+      end
+    end
+  end
+
   private def self.exec(url)
     uri = URI.parse(url)
+    unless uri.scheme
+      raise ArgumentError.new %(Request URI must have schema. Possibly add "http://" to the request URI?)
+    end
+
     host = uri.host.not_nil!
     port = uri.port
     path = uri.full_path
+    user = uri.user
+    password = uri.password
     ssl = false
 
     case uri.scheme
@@ -130,6 +179,9 @@ class HTTP::Client
     end
 
     HTTP::Client.new(host, port, ssl) do |client|
+      if user && password
+        client.basic_auth(user, password)
+      end
       yield client, path
     end
   end

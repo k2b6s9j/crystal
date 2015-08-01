@@ -129,7 +129,7 @@ class EmptyEnumerable < Exception
   end
 end
 
-class IndexOutOfBounds < Exception
+class IndexError < Exception
   def initialize(message = "Index out of bounds")
     super(message)
   end
@@ -153,7 +153,7 @@ class InvalidByteSequenceError < Exception
   end
 end
 
-class MissingKey < Exception
+class KeyError < Exception
 end
 
 class DivisionByZero < Exception

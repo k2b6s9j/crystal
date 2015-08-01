@@ -16,27 +16,27 @@ lib LibC
       O_TRUNC    = 0x0400
       O_NONBLOCK = 0x0004
     elsif linux
-      O_RDONLY   = 00000000
-      O_WRONLY   = 00000001
-      O_RDWR     = 00000002
-      O_APPEND   = 00002000
-      O_CREAT    = 00000100
-      O_TRUNC    = 00001000
-      O_NONBLOCK = 00004000
+      O_RDONLY   = 0o0000000
+      O_WRONLY   = 0o0000001
+      O_RDWR     = 0o0000002
+      O_APPEND   = 0o0002000
+      O_CREAT    = 0o0000100
+      O_TRUNC    = 0o0001000
+      O_NONBLOCK = 0o0004000
     end
 
-    S_IRWXU    = 0000700         # RWX mask for owner
-    S_IRUSR    = 0000400         # R for owner
-    S_IWUSR    = 0000200         # W for owner
-    S_IXUSR    = 0000100         # X for owner
-    S_IRWXG    = 0000070         # RWX mask for group
-    S_IRGRP    = 0000040         # R for group
-    S_IWGRP    = 0000020         # W for group
-    S_IXGRP    = 0000010         # X for group
-    S_IRWXO    = 0000007         # RWX mask for other
-    S_IROTH    = 0000004         # R for other
-    S_IWOTH    = 0000002         # W for other
-    S_IXOTH    = 0000001         # X for other
+    S_IRWXU    = 0o000700         # RWX mask for owner
+    S_IRUSR    = 0o000400         # R for owner
+    S_IWUSR    = 0o000200         # W for owner
+    S_IXUSR    = 0o000100         # X for owner
+    S_IRWXG    = 0o000070         # RWX mask for group
+    S_IRGRP    = 0o000040         # R for group
+    S_IWGRP    = 0o000020         # W for group
+    S_IXGRP    = 0o000010         # X for group
+    S_IRWXO    = 0o000007         # RWX mask for other
+    S_IROTH    = 0o000004         # R for other
+    S_IWOTH    = 0o000002         # W for other
+    S_IXOTH    = 0o000001         # X for other
   elsif windows
     O_RDONLY      = 0x0000
     O_WRONLY      = 0x0001
@@ -213,14 +213,19 @@ module IO
       raise Errno.new("Could not create pipe")
     end
 
-    {FileDescriptorIO.new(pipe_fds[0], read_blocking), FileDescriptorIO.new(pipe_fds[1], write_blocking)}
+    r = FileDescriptorIO.new(pipe_fds[0], read_blocking)
+    w = FileDescriptorIO.new(pipe_fds[1], write_blocking)
+    w.sync = true
+
+    {r, w}
   end
 
-  def self.pipe
-    r, w = IO.pipe
+  def self.pipe(read_blocking=false, write_blocking=false)
+    r, w = IO.pipe(read_blocking, write_blocking)
     begin
       yield r, w
     ensure
+      w.flush
       r.close
       w.close
     end
@@ -529,4 +534,3 @@ module IO
 end
 
 require "./io/*"
-

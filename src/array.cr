@@ -66,6 +66,10 @@ class Array(T)
   # ary.length #=> 0
   # ```
   def initialize(initial_capacity = 3 : Int)
+    if initial_capacity < 0
+      raise ArgumentError.new("negative array size: #{initial_capacity}")
+    end
+
     initial_capacity = Math.max(initial_capacity, 3)
     @length = 0
     @capacity = initial_capacity.to_i
@@ -217,10 +221,23 @@ class Array(T)
   end
 
   def -(other : Array(U))
-    ary = Array(T).new(length - other.length)
+    ary = Array(T).new(Math.max(length - other.length, 0))
     hash = other.to_lookup_hash
     each do |obj|
       ary << obj unless hash.has_key?(obj)
+    end
+    ary
+  end
+
+  # Repetition: Returns a new array built by concatenating `times` copies of `ary`.
+  #
+  # ```
+  # [ "a", "b", "c" ] * 2   #=> [ "a", "b", "c", "a", "b", "c" ]
+  # ```
+  def *(times : Int)
+    ary = Array(T).new(length * times)
+    times.times do
+      ary.concat(self)
     end
     ary
   end
@@ -229,10 +246,40 @@ class Array(T)
     push(value)
   end
 
+  # Returns the element at the given index.
+  #
+  # Negative indices can be used to start counting from the end of the array.
+  # Raises `IndexError` if trying to access an element outside the array's range.
+  #
+  # ```
+  # ary = ['a', 'b', 'c']
+  # ary[0]  #=> 'a'
+  # ary[2]  #=> 'c'
+  # ary[-1] #=> 'c'
+  # ary[-2] #=> 'b'
+  #
+  # ary[3]  # raises IndexError
+  # ary[-4] # raises IndexError
+  # ```
   def [](index : Int)
     at(index)
   end
 
+  # Returns the element at the given index.
+  #
+  # Negative indices can be used to start counting from the end of the array.
+  # Returns `nil` if trying to access an element outside the array's range.
+  #
+  # ```
+  # ary = ['a', 'b', 'c']
+  # ary[0]?  #=> 'a'
+  # ary[2]?  #=> 'c'
+  # ary[-1]? #=> 'c'
+  # ary[-2]? #=> 'b'
+  #
+  # ary[3]?  # nil
+  # ary[-4]? # nil
+  # ```
   def []?(index : Int)
     at(index) { nil }
   end
@@ -259,7 +306,7 @@ class Array(T)
     end
 
     start += length if start < 0
-    raise IndexOutOfBounds.new unless 0 <= start <= length
+    raise IndexError.new unless 0 <= start <= length
     raise ArgumentError.new "negative count: #{count}" if count < 0
 
     count = Math.min(count, length - start)
@@ -275,15 +322,15 @@ class Array(T)
   end
 
   def at(index : Int)
-    at(index) { raise IndexOutOfBounds.new }
+    at(index) { raise IndexError.new }
   end
 
   def at(index : Int)
     index += length if index < 0
-    if index >= length || index < 0
-      yield
-    else
+    if 0 <= index < length
       @buffer[index]
+    else
+      yield
     end
   end
 
@@ -490,7 +537,7 @@ class Array(T)
   def fill(from : Int)
     from += length if from < 0
 
-    raise IndexOutOfBounds.new if from >= length
+    raise IndexError.new if from >= length
 
     from.upto(length - 1) { |i| @buffer[i] = yield i }
 
@@ -503,7 +550,7 @@ class Array(T)
     from += length if from < 0
     size += length if size < 0
 
-    raise IndexOutOfBounds.new if from >= length || size + from > length
+    raise IndexError.new if from >= length || size + from > length
 
     size += from - 1
 
@@ -545,7 +592,7 @@ class Array(T)
   end
 
   def first
-    first { raise IndexOutOfBounds.new }
+    first { raise IndexError.new }
   end
 
   def first
@@ -570,7 +617,7 @@ class Array(T)
     end
 
     unless 0 <= index <= length
-      raise IndexOutOfBounds.new
+      raise IndexError.new
     end
 
     (@buffer + index + 1).move_from(@buffer + index, length - index)
@@ -584,7 +631,7 @@ class Array(T)
   end
 
   def last
-    last { raise IndexOutOfBounds.new }
+    last { raise IndexError.new }
   end
 
   def last
@@ -623,7 +670,7 @@ class Array(T)
   end
 
   def pop
-    pop { raise IndexOutOfBounds.new }
+    pop { raise IndexError.new }
   end
 
   def pop
@@ -727,7 +774,7 @@ class Array(T)
   end
 
   def sample
-    raise IndexOutOfBounds.new if @length == 0
+    raise IndexError.new if @length == 0
     @buffer[rand(@length)]
   end
 
@@ -762,7 +809,7 @@ class Array(T)
   end
 
   def shift
-    shift { raise IndexOutOfBounds.new }
+    shift { raise IndexError.new }
   end
 
   def shift
@@ -840,7 +887,7 @@ class Array(T)
     index1 += length if index1 < 0
 
     unless (0 <= index0 < length) && (0 <= index1 < length)
-      raise IndexOutOfBounds.new
+      raise IndexError.new
     end
 
     @buffer[index0], @buffer[index1] = @buffer[index1], @buffer[index0]
@@ -863,6 +910,29 @@ class Array(T)
 
   def to_unsafe
     @buffer
+  end
+
+  # Assumes that `self` is an array of array and transposes the rows and columns.
+  #
+  # ```
+  # a = [[:a, :b], [:c, :d], [:e, :f]]
+  # a.transpose   # => [[:a, :c, :e], [:b, :d, :f]]
+  # a             # => [[:a, :b], [:c, :d], [:e, :f]]
+  # ```
+  def transpose
+    return Array(Array(typeof(first.first))).new if empty?
+
+    len = at(0).length
+    (1...@length).each do |i|
+      l = at(i).length
+      raise IndexError.new if len != l
+    end
+
+    Array(Array(typeof(first.first))).new(len) do |i|
+      Array(typeof(first.first)).new(@length) do |j|
+        at(j).at(i)
+      end
+    end
   end
 
   # Returns a new array by removing duplicate values in `self`.
@@ -985,8 +1055,8 @@ class Array(T)
         r -= 1
       end
     end
-    quicksort!(a, (r - a) + 1, comp)
-    quicksort!(l, (a + n) - l, comp)
+    quicksort!(a, (r - a) + 1, comp) unless r == a + n - 1
+    quicksort!(l, (a + n) - l, comp) unless l == a
   end
 
   protected def self.quicksort!(a, n)
@@ -1007,14 +1077,14 @@ class Array(T)
         r -= 1
       end
     end
-    quicksort!(a, (r - a) + 1)
-    quicksort!(l, (a + n) - l)
+    quicksort!(a, (r - a) + 1) unless r == a + n - 1
+    quicksort!(l, (a + n) - l) unless l == a
   end
 
   private def check_index_out_of_bounds(index)
     index += length if index < 0
     unless 0 <= index < length
-      raise IndexOutOfBounds.new
+      raise IndexError.new
     end
     index
   end

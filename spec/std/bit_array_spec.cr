@@ -49,7 +49,7 @@ describe "BitArray" do
 
   it "is raises when out of bounds" do
     ary = BitArray.new(10)
-    expect_raises IndexOutOfBounds do
+    expect_raises IndexError do
       ary[10] = true
     end
   end
@@ -60,5 +60,10 @@ describe "BitArray" do
     ary[2] = true
     ary[4] = true
     ary.to_s.should eq("BitArray[10101000]")
+  end
+
+  it "initializes with true by default" do
+    ary = BitArray.new(64, true)
+    ary.length.times { |i| ary[i].should be_true }
   end
 end

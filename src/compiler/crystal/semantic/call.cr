@@ -110,10 +110,13 @@ class Crystal::Call
     arg_types = Array(Type).new(args.length * 2)
     args.each do |arg|
       if arg.is_a?(Splat)
-        if (arg_type = arg.type).is_a?(TupleInstanceType)
+        case arg_type = arg.type
+        when TupleInstanceType
           arg_types.concat arg_type.tuple_types
+        when UnionType
+          arg.raise "splatting a union #{arg_type} is not yet supported"
         else
-          arg.raise "splatting a union (#{arg_type}) is not yet supported"
+          arg.raise "argument to splat must be a tuple, not #{arg_type}"
         end
       else
         arg_types << arg.type
@@ -572,6 +575,7 @@ class Crystal::Call
     end
 
     node_scope = scope
+    node_scope = node_scope.base_type if node_scope.is_a?(VirtualType)
     node_scope = node_scope.metaclass unless node_scope.metaclass?
 
     macros = yield node_scope
@@ -607,7 +611,10 @@ class Crystal::Call
       # If there are input types, solve them and creating the yield vars
       if inputs = block_arg_fun.inputs
         yield_vars = inputs.map_with_index do |input, i|
-          Var.new("var#{i}", ident_lookup.lookup_node_type(input).virtual_type)
+          arg_type = ident_lookup.lookup_node_type(input)
+          TypeVisitor.check_type_allowed_as_proc_argument(input, arg_type)
+
+          Var.new("var#{i}", arg_type.virtual_type)
         end
       end
       block_arg_fun_output = block_arg_fun.output

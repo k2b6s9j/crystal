@@ -1,4 +1,6 @@
-class Crystal::CodeGenVisitor < Crystal::Visitor
+require "./codegen"
+
+class Crystal::CodeGenVisitor
   def target_def_fun(target_def, self_type)
     mangled_name = target_def.mangled_name(self_type)
     self_type_mod = type_module(self_type)
@@ -43,7 +45,8 @@ class Crystal::CodeGenVisitor < Crystal::Visitor
     old_position = insert_block
     old_entry_block = @entry_block
     old_alloca_block = @alloca_block
-    old_exception_handlers = @exception_handlers
+    old_ensure_exception_handlers = @ensure_exception_handlers
+    old_rescue_block = @rescue_block
     old_llvm_mod = @llvm_mod
     old_needs_value = @needs_value
 
@@ -54,7 +57,8 @@ class Crystal::CodeGenVisitor < Crystal::Visitor
 
       @llvm_mod = fun_module
 
-      @exception_handlers = nil
+      @ensure_exception_handlers = nil
+      @rescue_block = nil
       @needs_value = true
 
       args = codegen_fun_signature(mangled_name, target_def, self_type, is_fun_literal, is_closure)
@@ -102,7 +106,8 @@ class Crystal::CodeGenVisitor < Crystal::Visitor
       @last = llvm_nil
 
       @llvm_mod = old_llvm_mod
-      @exception_handlers = old_exception_handlers
+      @ensure_exception_handlers = old_ensure_exception_handlers
+      @rescue_block = old_rescue_block
       @entry_block = old_entry_block
       @alloca_block = old_alloca_block
       @needs_value = old_needs_value

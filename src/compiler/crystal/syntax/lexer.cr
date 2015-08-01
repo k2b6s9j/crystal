@@ -542,7 +542,7 @@ module Crystal
           @token.value = char1
         end
         if next_char != '\''
-          raise "unterminated char literal", line, column
+          raise "unterminated char literal, use double quotes for strings", line, column
         end
         next_char
       when '"', '`'
@@ -586,13 +586,18 @@ module Crystal
           next_char
           @token.type = :"$?"
         when .digit?
-          number = current_char - '0'
-          while (char = next_char).digit?
-            number *= 10
-            number += char - '0'
+          start = current_pos
+          char = next_char
+          if char == '0'
+            char = next_char
+          else
+            while char.digit?
+              char = next_char
+            end
+            char = next_char if char == '?'
           end
           @token.type = :GLOBAL_MATCH_DATA_INDEX
-          @token.value = number
+          @token.value = string_range(start)
         else
           if ident_start?(current_char)
             while ident_part?(next_char)
@@ -615,7 +620,12 @@ module Crystal
             return check_ident_or_keyword(:alias, start)
           end
         when 's'
-          return check_ident_or_keyword(:as, start)
+          if peek_next_char == 'm'
+            next_char
+            return check_ident_or_keyword(:asm, start)
+          else
+            return check_ident_or_keyword(:as, start)
+          end
         end
         scan_ident(start)
       when 'b'
@@ -1325,7 +1335,6 @@ module Crystal
       when 'x'
         scan_hex_number(start, negative)
       when 'o'
-        next_char
         scan_octal_number(start, negative)
       when 'b'
         scan_bin_number(start, negative)
@@ -1367,7 +1376,11 @@ module Crystal
           scan_number(start)
         end
       else
-        scan_octal_number(start, negative)
+        if next_char.digit?
+          raise "octal constants should be prefixed with 0o"
+        else
+          finish_scan_prefixed_number 0_u64, false, start
+        end
       end
     end
 
@@ -1392,6 +1405,8 @@ module Crystal
     end
 
     def scan_octal_number(start, negative)
+      next_char
+
       num = 0_u64
 
       while true
@@ -1450,9 +1465,9 @@ module Crystal
       end
 
       first_byte = @reader.string.byte_at(start)
-      if first_byte == '+'.ord
+      if first_byte === '+'
         string_value = "+#{string_value}"
-      elsif first_byte == '-'.ord && num == 0
+      elsif first_byte === '-' && num == 0
         string_value = "-0"
       end
 
@@ -1802,8 +1817,8 @@ module Crystal
           whitespace = true
           beginning_of_line = true
         when '\\'
+          char = next_char
           if delimiter_state
-            char = next_char
             if char == '"'
               char = next_char
             end
@@ -1811,6 +1826,7 @@ module Crystal
           else
             whitespace = false
           end
+          next
         when '\'', '"'
           if delimiter_state
             delimiter_state = nil if delimiter_state.end == char
@@ -1899,7 +1915,16 @@ module Crystal
     def check_macro_opening_keyword(beginning_of_line)
       case char = current_char
       when 'a'
-        next_char == 'b' && next_char == 's' && next_char == 't' && next_char == 'r' && next_char == 'a' && next_char == 'c' && next_char == 't' && next_char.whitespace? && next_char == 'd' && next_char == 'e' && next_char == 'f' && !ident_part_or_end?(next_char) && :abstract_def
+        if next_char == 'b' && next_char == 's' && next_char == 't' && next_char == 'r' && next_char == 'a' && next_char == 'c' && next_char == 't' && next_char.whitespace?
+          case next_char
+          when 'd'
+            next_char == 'e' && next_char == 'f' && !ident_part_or_end?(next_char) && :abstract_def
+          when 'c'
+            next_char == 'l' && next_char == 'a' && next_char == 's' && next_char == 's' && !ident_part_or_end?(next_char) && :abstract_class
+          when 's'
+            next_char == 't' && next_char == 'r' && next_char == 'u' && next_char == 'c' && next_char == 't' && !ident_part_or_end?(next_char) && :abstract_struct
+          end
+        end
       when 'b'
         next_char == 'e' && next_char == 'g' && next_char == 'i' && next_char == 'n' && !ident_part_or_end?(next_char) && :begin
       when 'c'
@@ -1927,7 +1952,7 @@ module Crystal
           (char == 'o' && next_char == 'd' && next_char == 'u' && next_char == 'l' && next_char == 'e' && !ident_part_or_end?(next_char) && :module)
         )
       when 's'
-        next_char == 't' && next_char == 'r' && next_char == 'u' && next_char == 'c' && next_char == 't' && !ident_part_or_end?(next_char) && :lib
+        next_char == 't' && next_char == 'r' && next_char == 'u' && next_char == 'c' && next_char == 't' && !ident_part_or_end?(next_char) && :struct
       when 'u'
         next_char == 'n' && (char = next_char) && (
           (char == 'i' && next_char == 'o' && next_char == 'n' && !ident_part_or_end?(next_char) && :union) ||

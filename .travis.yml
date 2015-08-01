@@ -25,13 +25,14 @@ install: |
       ;;
 
     osx)
-      brew install gmp libevent crystal
+      brew install gmp libevent crystal-lang
       curl "http://crystal-lang.s3.amazonaws.com/llvm/llvm-3.5.0-1-darwin-x86_64.tar.gz" | tar xz -C /tmp
-      export LIBRARY_PATH=/usr/local/opt/crystal/embedded/lib
+      export LIBRARY_PATH=/usr/local/opt/crystal-lang/embedded/lib
       ;;
   esac
   export PATH=/tmp/llvm-3.5.0-1/bin:$PATH
   export CRYSTAL_CONFIG_VERSION=ci
+  export CRYSTAL_CACHE_DIR=/tmp/crystal
 script:
   - make crystal spec
   - find samples -name "*.cr" | xargs -L 1 ./bin/crystal build --no-build
@@ -41,6 +42,8 @@ notifications:
       - "irc.freenode.net#crystal-lang"
     use_notice: true
     skip_join: true
+    template:
+      - "%{repository_slug}#%{commit} (%{branch} - %{commit_subject}): %{message} %{build_url}"
   slack:
     secure: Ng3nTqGWY+9p1pS6yjGqDhmRvdgbIZgTNpMWbO/ngwpCyicmD3jafZkShqqXbULZTJJr3OxIGzi6GHGusT0Ic/Pi9JCM3X3v/xuBruKIR+EnNyPo7IL4ZYAlwnXyJHlCHHDBq0gSHGvGJwsXn6IgZBPRfeIq+CCyQHVPyvc9EHE=
 branches:

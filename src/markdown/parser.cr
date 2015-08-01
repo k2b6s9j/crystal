@@ -47,6 +47,10 @@ class Markdown::Parser
       return render_fenced_code
     end
 
+    if starts_with_digits_dot? line
+      return render_ordered_list
+    end
+
     render_paragraph
   end
 
@@ -88,7 +92,7 @@ class Markdown::Parser
         break
       end
 
-      if starts_with_star?(line) || starts_with_backticks?(line)
+      if starts_with_star?(line) || starts_with_backticks?(line) || starts_with_digits_dot?(line)
         break
       end
 
@@ -197,6 +201,39 @@ class Markdown::Parser
     append_double_newline_if_has_more
   end
 
+  def render_ordered_list
+    @renderer.begin_ordered_list
+
+    while true
+      line = @lines[@line]
+
+      if empty? line
+        @line += 1
+
+        if @line == @lines.length
+          break
+        end
+
+        next
+      end
+
+      break unless starts_with_digits_dot? line
+
+      @renderer.begin_list_item
+      process_line line.byte_slice(line.index('.').not_nil! + 1)
+      @renderer.end_list_item
+      @line += 1
+
+      if @line == @lines.length
+        break
+      end
+    end
+
+    @renderer.end_ordered_list
+
+    append_double_newline_if_has_more
+  end
+
   def append_double_newline_if_has_more
     if @line < @lines.length
       newline
@@ -282,7 +319,7 @@ class Markdown::Parser
           one_backtick = !one_backtick
         end
       when '!'
-        if pos + 1 < bytesize && str[pos + 1] == '['.ord
+        if pos + 1 < bytesize && str[pos + 1] === '['
           link = check_link str, (pos + 2), bytesize
           if link
             @renderer.text line.byte_slice(cursor, pos - cursor)
@@ -313,8 +350,8 @@ class Markdown::Parser
           @renderer.end_link
 
           paren_idx = (str + pos + 1).to_slice(bytesize - pos - 1).index(')'.ord).not_nil!
-          pos += paren_idx + 2
-          cursor = pos
+          pos += paren_idx + 1
+          cursor = pos + 1
           in_link = false
         end
       end
@@ -361,7 +398,7 @@ class Markdown::Parser
     return nil unless bracket_count == 0
     bracket_idx = pos
 
-    return nil unless str[bracket_idx + 1] == '('.ord
+    return nil unless str[bracket_idx + 1] === '('
 
     paren_idx = (str + bracket_idx + 1).to_slice(bytesize - bracket_idx - 1).index ')'.ord
     return nil unless paren_idx
@@ -434,6 +471,25 @@ class Markdown::Parser
 
   def starts_with_backticks?(line)
     line.starts_with? "```"
+  end
+
+  def starts_with_digits_dot?(line)
+    bytesize = line.bytesize
+    str = line.to_unsafe
+    pos = 0
+    while pos < bytesize && str[pos].chr.whitespace?
+      pos += 1
+    end
+
+    return false unless pos < bytesize
+    return false unless str[pos].chr.digit?
+
+    while pos < bytesize && str[pos].chr.digit?
+      pos += 1
+    end
+
+    return false unless pos < bytesize
+    str[pos].chr == '.'
   end
 
   def next_lines_empty_of_code?

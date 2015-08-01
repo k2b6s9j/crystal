@@ -608,6 +608,28 @@ describe "Code gen: macro" do
     )).to_string.should eq("Int32")
   end
 
+  it "can acccess type parameters that are not types" do
+    run(%(
+      class Foo(T)
+        def foo
+          {{ @type.type_params.first.is_a?(NumberLiteral) }}
+        end
+      end
+      Foo(1).new.foo
+    )).to_b.should eq(true)
+  end
+
+  it "can acccess type parameters of a tuple" do
+    run(%(
+      struct Tuple
+        def foo
+          {{ @type.type_params.first.name.stringify }}
+        end
+      end
+      {1, 2, 3}.foo
+    )).to_string.should eq("Int32")
+  end
+
   it "receives &block" do
     run(%(
       macro foo(&block)
@@ -1019,5 +1041,106 @@ describe "Code gen: macro" do
 
       some_macro 1, 2, 3, 4
       )).to_i.should eq(3)
+  end
+
+  it "checks if macro expansion returns (#821)" do
+    run(%(
+      macro pass
+        return 123
+      end
+
+      def me
+        pass
+        nil
+      end
+
+      me
+      )).to_i.should eq(123)
+  end
+
+  it "passes #826" do
+    run(%(
+      macro foo
+        macro bar
+          {{yield}}
+        end
+      end
+
+      foo do
+        123
+      end
+
+      bar
+      )).to_i.should eq(123)
+  end
+
+  it "declares constant in macro (#838)" do
+    run(%(
+      macro foo
+        {{yield}}
+      end
+
+      foo do
+        X = 123
+      end
+
+      X
+      )).to_i.should eq(123)
+  end
+
+  it "errors if dynamic constant assignment after macro expansion" do
+    assert_error %(
+      macro foo
+        X = 123
+      end
+
+      def bar
+        foo
+      end
+
+      bar
+      ),
+      "dynamic constant assignment"
+  end
+
+  it "finds macro from virtual type" do
+    run(%(
+      class Foo
+        macro foo
+          123
+        end
+
+        def bar
+          foo
+        end
+      end
+
+      class Bar < Foo
+      end
+
+      a = Pointer(Foo).malloc(1_u64)
+      a.value = Foo.new
+      a.value.bar
+      )).to_i.should eq(123)
+  end
+
+  it "expands macro with escaped quotes (#895)" do
+    run(%(
+      macro foo(x)
+        "{{x}}\\""
+      end
+
+      foo hello
+      )).to_string.should eq(%(hello"))
+  end
+
+  it "expands macro def with return (#1040)" do
+    run(%(
+      macro def a : Int32
+        return 123
+      end
+
+      a
+      )).to_i.should eq(123)
   end
 end

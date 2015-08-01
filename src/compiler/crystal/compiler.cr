@@ -3,7 +3,6 @@ require "file_utils"
 require "socket"
 require "http/common"
 require "colorize"
-require "tempfile"
 require "crypto/md5"
 
 module Crystal
@@ -148,7 +147,7 @@ module Crystal
         output_dir = "."
       else
         ifdef darwin || linux
-          output_dir = ".crystal/#{sources.first.filename}"
+          output_dir = File.join(Config.cache_dir, sources.first.filename)
         elsif windows
           output_dir = ".crystal\\#{sources.first.filename[3..-1]}"
         end

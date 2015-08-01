@@ -44,7 +44,14 @@ describe "Type inference: splat" do
       a = {1} || {1, 2}
       foo *a
       ),
-      "splatting a union (({Int32} | {Int32, Int32})) is not yet supported"
+      "splatting a union ({Int32} | {Int32, Int32}) is not yet supported"
+  end
+
+  it "errors if splatting non-tuple type" do
+    assert_error %(
+      foo *1
+      ),
+      "argument to splat must be a tuple, not Int32"
   end
 
   it "forwards tuple with an extra argument" do
@@ -202,6 +209,80 @@ describe "Type inference: splat" do
       end
 
       foo 1, 2, 3
+      )) { char }
+  end
+
+  it "overloads with splat against method with two arguments (#986) (1)" do
+    assert_type(%(
+      def foo(a, b)
+        1
+      end
+
+      def foo(*arg)
+        'a'
+      end
+
+      foo "bar", "baz"
+      )) { int32 }
+  end
+
+  it "overloads with splat against method with two arguments (#986) (2)" do
+    assert_type(%(
+      def foo(a, b)
+        1
+      end
+
+      def foo(*arg)
+        'a'
+      end
+
+      foo "bar"
+      )) { char }
+  end
+
+  it "calls super with implicit splat arg (#1001)" do
+    assert_type(%(
+      class Foo
+        def foo(name)
+          name
+        end
+      end
+
+      class Bar < Foo
+        def foo(*args)
+          super
+        end
+      end
+
+      Bar.new.foo 1
+      )) { int32 }
+  end
+
+  it "splats arg and splat against splat (1) (#1042)" do
+    assert_type(%(
+      def foo(a: Bool, *b: Int32)
+        1
+      end
+
+      def foo(*b: Int32)
+        'a'
+      end
+
+      foo(true, 3, 4, 5)
+      )) { int32 }
+  end
+
+  it "splats arg and splat against splat (2) (#1042)" do
+    assert_type(%(
+      def foo(a: Bool, *b: Int32)
+        1
+      end
+
+      def foo(*b: Int32)
+        'a'
+      end
+
+      foo(3, 4, 5)
       )) { char }
   end
 end

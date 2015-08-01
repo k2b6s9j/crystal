@@ -5,13 +5,14 @@ class HTTP::Response
   getter status_code
   getter status_message
   getter headers
+  getter! body_io
   property upgrade_handler
 
-  def initialize(@status_code, @body = nil, @headers = Headers.new : Headers, status_message = nil, @version = "HTTP/1.1")
+  def initialize(@status_code, @body = nil, @headers = Headers.new : Headers, status_message = nil, @version = "HTTP/1.1", @body_io = nil)
     @status_message = status_message || self.class.default_status_message_for(@status_code)
 
     if (body = @body)
-      @headers["Content-Length"] = body.bytesize.to_s
+      @headers["Content-length"] = body.bytesize.to_s
     end
   end
 
@@ -23,20 +24,24 @@ class HTTP::Response
     @body
   end
 
+  def keep_alive?
+    HTTP.keep_alive?(self)
+  end
+
   def self.not_found
-    new(404, "Not Found", Headers{"Content-Type": "text/plain"})
+    new(404, "Not Found", Headers{"Content-type": "text/plain"})
   end
 
   def self.ok(content_type, body)
-    new(200, body, Headers{"Content-Type": content_type})
+    new(200, body, Headers{"Content-type": content_type})
   end
 
   def self.error(content_type, body)
-    new(500, body, Headers{"Content-Type": content_type})
+    new(500, body, Headers{"Content-type": content_type})
   end
 
   def self.unauthorized
-    new(401, "Unauthorized", Headers{"Content-Type": "text/plain"})
+    new(401, "Unauthorized", Headers{"Content-type": "text/plain"})
   end
 
   def to_io(io)
@@ -45,13 +50,30 @@ class HTTP::Response
   end
 
   def self.from_io(io)
-    status_line = io.gets.not_nil!
-    status_line =~ /\A(HTTP\/\d\.\d)\s(\d\d\d)\s(.*?)\r?\n\Z/
+    line = io.gets
+    if line
+      http_version, status_code, status_message = line.split(3)
+      status_code = status_code.to_i
+      status_message = status_message.chomp
 
-    http_version, status_code, status_message = $1, $2.to_i, $3
+      HTTP.parse_headers_and_body(io) do |headers, body|
+        return new status_code, body.try &.read, headers, status_message, http_version
+      end
+    end
 
-    HTTP.parse_headers_and_body(io) do |headers, body|
-      return new status_code, body, headers, status_message, http_version
+    raise "unexpected end of http response"
+  end
+
+  def self.from_io(io, &block)
+    line = io.gets
+    if line
+      http_version, status_code, status_message = line.split(3)
+      status_code = status_code.to_i
+      status_message = status_message.chomp
+
+      HTTP.parse_headers_and_body(io) do |headers, body|
+        return yield new status_code, nil, headers, status_message, http_version, body
+      end
     end
 
     raise "unexpected end of http response"

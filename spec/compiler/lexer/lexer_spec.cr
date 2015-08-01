@@ -114,7 +114,7 @@ end
 
 private def it_lexes_global_match_data_index(globals)
   globals.each do |global|
-    it_lexes global, :GLOBAL_MATCH_DATA_INDEX, global[1, global.length - 1].to_i
+    it_lexes global, :GLOBAL_MATCH_DATA_INDEX, global[1, global.length - 1]
   end
 end
 
@@ -130,7 +130,7 @@ describe "Lexer" do
                      :begin, :lib, :fun, :type, :struct, :union, :enum, :macro, :out, :require,
                      :case, :when, :then, :of, :abstract, :rescue, :ensure, :is_a?, :alias,
                      :pointerof, :sizeof, :instance_sizeof, :ifdef, :as, :typeof, :for, :in,
-                     :undef, :with, :self, :super, :private, :protected]
+                     :undef, :with, :self, :super, :private, :protected, :asm]
   it_lexes_idents ["ident", "something", "with_underscores", "with_1", "foo?", "bar!", "fooBar",
                    "❨╯°□°❩╯︵┻━┻"]
   it_lexes_idents ["def?", "if?", "else?", "elsif?", "end?", "true?", "false?", "class?", "while?",
@@ -187,10 +187,9 @@ describe "Lexer" do
 
   it_lexes_number :u64, ["0xFFFF_u64", "65535"]
 
-  it_lexes_i32 [["0123", "83"], ["-0123", "-83"], ["+0123", "+83"]]
   it_lexes_i32 [["0o123", "83"], ["-0o123", "-83"], ["+0o123", "+83"]]
   it_lexes_f64 [["0.5", "0.5"], ["+0.5", "+0.5"], ["-0.5", "-0.5"]]
-  it_lexes_i64 [["0123_i64", "83"], ["0o123_i64", "83"], ["0x1_i64", "1"], ["0b1_i64", "1"]]
+  it_lexes_i64 [["0o123_i64", "83"], ["0x1_i64", "1"], ["0b1_i64", "1"]]
 
   it_lexes_i64 ["2147483648", "-2147483649", "-9223372036854775808"]
   it_lexes_i64 [["2147483648.foo", "2147483648"]]
@@ -201,6 +200,10 @@ describe "Lexer" do
 
   it_lexes_number :i32, ["+0", "+0"]
   it_lexes_number :i32, ["-0", "-0"]
+
+  it_lexes_number :i32, ["0", "0"]
+  it_lexes_number :i32, ["0_i32", "0"]
+  it_lexes_number :i8, ["0i8", "0"]
 
   it_lexes_char "'a'", 'a'
   it_lexes_char "'\\b'", 8.chr
@@ -234,7 +237,7 @@ describe "Lexer" do
   it_lexes_symbols [":foo", ":foo!", ":foo?", ":\"foo\"", ":かたな", ":+", ":-", ":*", ":/",
                     ":==", ":<", ":<=", ":>", ":>=", ":!", ":!=", ":=~", ":!~", ":&", ":|",
                     ":^", ":~", ":**", ":>>", ":<<", ":%", ":[]", ":[]?", ":[]=", ":<=>", ":==="]
-  it_lexes_global_match_data_index ["$1", "$10"]
+  it_lexes_global_match_data_index ["$1", "$10", "$1?", "$23?"]
 
   it_lexes "$~", :"$~"
   it_lexes "$?", :"$?"
@@ -263,9 +266,12 @@ describe "Lexer" do
   assert_syntax_error "18446744073709551616", "18446744073709551616 doesn't fit in an UInt64"
 
   assert_syntax_error "0xFF_i8", "255 doesn't fit in an Int8"
-  assert_syntax_error "0200_i8", "128 doesn't fit in an Int8"
   assert_syntax_error "0o200_i8", "128 doesn't fit in an Int8"
   assert_syntax_error "0b10000000_i8", "128 doesn't fit in an Int8"
+
+  assert_syntax_error "0123", "octal constants should be prefixed with 0o"
+  assert_syntax_error "00", "octal constants should be prefixed with 0o"
+  assert_syntax_error "01_i64", "octal constants should be prefixed with 0o"
 
   it "lexes not instance var" do
     lexer = Lexer.new "!@foo"

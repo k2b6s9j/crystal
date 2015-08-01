@@ -125,7 +125,7 @@ describe "Hash" do
 
     it "fetches and raises" do
       a = {1 => 2}
-      expect_raises MissingKey, "Missing hash value: 2" do
+      expect_raises KeyError, "Missing hash value: 2" do
         a.fetch(2)
       end
     end
@@ -137,7 +137,7 @@ describe "Hash" do
     end
 
     it "raises when passed an invalid key" do
-      expect_raises MissingKey do
+      expect_raises KeyError do
         {"a": 1}.values_at("b")
       end
     end
@@ -242,7 +242,7 @@ describe "Hash" do
   it "clones" do
     h1 = {1 => 2, 3 => 4}
     h2 = h1.clone
-    h1.object_id.should_not eq(h2.object_id)
+    h1.should_not be(h2)
     h1.should eq(h2)
   end
 
@@ -287,17 +287,51 @@ describe "Hash" do
   it "merges" do
     h1 = {1 => 2, 3 => 4}
     h2 = {1 => 5, 2 => 3}
-    h3 = h1.merge(h2)
-    h3.object_id.should_not eq(h1.object_id)
-    h3.should eq({1 => 5, 3 => 4, 2 => 3})
+    h3 = {"1" => "5", "2" => "3"}
+
+    h4 = h1.merge(h2)
+    h4.should_not be(h1)
+    h4.should eq({1 => 5, 3 => 4, 2 => 3})
+
+    h5 = h1.merge(h3)
+    h5.should_not be(h1)
+    h5.should eq({1 => 2, 3 => 4, "1" => "5", "2" => "3"})
+  end
+
+  it "merges with block" do
+    h1 = {1 => 5, 2 => 3}
+    h2 = {1 => 5, 3 => 4, 2 => 3}
+
+    h3 = h2.merge(h1) { |k, v1, v2| k + v1 + v2 }
+    h3.should_not be(h2)
+    h3.should eq({1 => 11, 3 => 4, 2 => 8})
   end
 
   it "merges!" do
     h1 = {1 => 2, 3 => 4}
     h2 = {1 => 5, 2 => 3}
+
     h3 = h1.merge!(h2)
-    h3.object_id.should eq(h1.object_id)
+    h3.should be(h1)
     h3.should eq({1 => 5, 3 => 4, 2 => 3})
+  end
+
+  it "merges! with block" do
+    h1 = {1 => 5, 2 => 3}
+    h2 = {1 => 5, 3 => 4, 2 => 3}
+
+    h3 = h2.merge!(h1) { |k, v1, v2| k + v1 + v2 }
+    h3.should be(h2)
+    h3.should eq({1 => 11, 3 => 4, 2 => 8})
+  end
+
+  it "merges! with block and nilable keys" do
+    h1 = {1 => nil, 2 => 4, 3 => "x"}
+    h2 = {1 => 2, 2 => nil, 3 => "y"}
+
+    h3 = h1.merge!(h2) { |k, v1, v2| (v1 || v2).to_s }
+    h3.should be(h1)
+    h3.should eq({1 => "2", 2 => "4", 3 => "x"})
   end
 
   it "zips" do
@@ -411,6 +445,17 @@ describe "Hash" do
     x = {a: 1, b: 2, c: 3, d: 4}
     x.delete_if { |k, v| v % 2 == 0 }
     x.should eq({a: 1, c: 3})
+  end
+
+  it "inverts" do
+    h1 = {"one" => 1, "two" => 2, "three" => 3}
+    h2 = {"a" => 1, "b" => 2, "c" => 1}
+
+    h1.invert.should eq({1 => "one", 2 => "two", 3 => "three"})
+
+    h3 = h2.invert
+    h3.length.should eq(2)
+    %w[a c].should contain h3[1]
   end
 
   it "gets each iterator" do

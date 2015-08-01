@@ -2,7 +2,38 @@ require "spec"
 
 alias RecursiveArray = Array(RecursiveArray)
 
+class BadSortingClass
+  include Comparable(self)
+  def <=>(other)
+    1
+  end
+end
+
 describe "Array" do
+  describe "new" do
+    it "creates with default value" do
+      ary = Array.new(5, 3)
+      ary.should eq([3, 3, 3, 3, 3])
+    end
+
+    it "creates with default value in block" do
+      ary = Array.new(5) { |i| i * 2 }
+      ary.should eq([0, 2, 4, 6, 8])
+    end
+
+    it "raises on negative count" do
+      expect_raises(ArgumentError, "negative array size") do
+        Array.new(-1, 3)
+      end
+    end
+
+    it "raises on negative capacity" do
+      expect_raises(ArgumentError, "negative array size") do
+        Array(Int32).new(-1)
+      end
+    end
+  end
+
   describe "==" do
     it "compares empty" do
       ([] of Int32).should eq([] of Int32)
@@ -47,8 +78,23 @@ describe "Array" do
     0.upto(4) { |i| c[i].should eq(i + 1) }
   end
 
-  it "does -" do
-    ([1, 2, 3, 4, 5] - [4, 2]).should eq([1, 3, 5])
+  it "does + with empty tuple converted to array (#909)" do
+    ([1, 2] + Tuple.new.to_a).should eq([1, 2])
+    (Tuple.new.to_a + [1, 2]).should eq([1, 2])
+  end
+
+  describe "-" do
+    it "does it" do
+      ([1, 2, 3, 4, 5] - [4, 2]).should eq([1, 3, 5])
+    end
+
+    it "does with larger array coming second" do
+      ([4, 2] - [1, 2, 3]).should eq([4])
+    end
+  end
+
+  it "does *" do
+    ([1, 2, 3] * 3).should eq([1, 2, 3, 1, 2, 3, 1, 2, 3])
   end
 
   describe "[]" do
@@ -93,7 +139,7 @@ describe "Array" do
     end
 
     it "raises on index out of bounds with range" do
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         [1, 2, 3][4, 0]
       end
     end
@@ -105,7 +151,7 @@ describe "Array" do
     end
 
     it "raises on index out of bounds" do
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         [1, 2, 3][-4, 2]
       end
     end
@@ -165,7 +211,7 @@ describe "Array" do
     end
 
     it "raises when passed an invalid index" do
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         ["a"].values_at(10)
       end
     end
@@ -186,8 +232,8 @@ describe "Array" do
     a = [x]
     b = a.clone
     b.should eq(a)
-    a.object_id.should_not eq(b.object_id)
-    a[0].object_id.should_not eq(b[0].object_id)
+    a.should_not be(b)
+    a[0].should_not be(b[0])
   end
 
   it "does compact" do
@@ -259,7 +305,7 @@ describe "Array" do
 
     it "deletes out of bounds" do
       a = [1, 2, 3, 4]
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         a.delete_at(4)
       end
     end
@@ -278,8 +324,8 @@ describe "Array" do
     a = [x]
     b = a.dup
     b.should eq([x])
-    a.object_id.should_not eq(b.object_id)
-    a[0].object_id.should eq(b[0].object_id)
+    a.should_not be(b)
+    a[0].should be(b[0])
     b << {3 => 4}
     a.should eq([x])
   end
@@ -366,7 +412,7 @@ describe "Array" do
     end
 
     it "raises when empty" do
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         ([] of Int32).first
       end
     end
@@ -413,7 +459,7 @@ describe "Array" do
     end
 
     it "raises if out of bounds" do
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         [1, 2, 3][4]
       end
     end
@@ -444,7 +490,7 @@ describe "Array" do
     it "inserts out of range" do
       a = [1, 3, 4]
 
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         a.insert(4, 1)
       end
     end
@@ -461,7 +507,7 @@ describe "Array" do
     end
 
     it "raises when empty" do
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         ([] of Int32).last
       end
     end
@@ -497,7 +543,7 @@ describe "Array" do
     end
 
     it "raises when empty" do
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         ([] of Int32).pop
       end
     end
@@ -638,7 +684,7 @@ describe "Array" do
     end
 
     it "raises when empty" do
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         ([] of Int32).shift
       end
     end
@@ -684,23 +730,11 @@ describe "Array" do
   end
 
   describe "sort" do
-    it "sort! without block" do
-      a = [3, 4, 1, 2, 5, 6]
-      a.sort!
-      a.should eq([1, 2, 3, 4, 5, 6])
-    end
-
     it "sort without block" do
       a = [3, 4, 1, 2, 5, 6]
       b = a.sort
       b.should eq([1, 2, 3, 4, 5, 6])
       a.should_not eq(b)
-    end
-
-    it "sort! with a block" do
-      a = ["foo", "a", "hello"]
-      a.sort! { |x, y| x.length <=> y.length }
-      a.should eq(["a", "foo", "hello"])
     end
 
     it "sort with a block" do
@@ -710,17 +744,40 @@ describe "Array" do
       a.should_not eq(b)
     end
 
-    it "sorts by!" do
-      a = ["foo", "a", "hello"]
-      a.sort_by! &.length
-      a.should eq(["a", "foo", "hello"])
+    it "doesn't crash on special situations" do
+      [1, 2, 3].sort { 1 }
+      Array.new(10) { BadSortingClass.new }.sort
+    end
+  end
+
+  describe "sort!" do
+    it "sort! without block" do
+      a = [3, 4, 1, 2, 5, 6]
+      a.sort!
+      a.should eq([1, 2, 3, 4, 5, 6])
     end
 
+    it "sort! with a block" do
+      a = ["foo", "a", "hello"]
+      a.sort! { |x, y| x.length <=> y.length }
+      a.should eq(["a", "foo", "hello"])
+    end
+  end
+
+  describe "sort_by" do
     it "sorts by" do
       a = ["foo", "a", "hello"]
       b = a.sort_by &.length
       b.should eq(["a", "foo", "hello"])
       a.should_not eq(b)
+    end
+  end
+
+  describe "sort_by!" do
+    it "sorts by!" do
+      a = ["foo", "a", "hello"]
+      a.sort_by! &.length
+      a.should eq(["a", "foo", "hello"])
     end
   end
 
@@ -739,14 +796,14 @@ describe "Array" do
 
     it "swaps but raises out of bounds on left" do
       a = [1, 2, 3]
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         a.swap(3, 0)
       end
     end
 
     it "swaps but raises out of bounds on right" do
       a = [1, 2, 3]
-      expect_raises IndexOutOfBounds do
+      expect_raises IndexError do
         a.swap(0, 3)
       end
     end
@@ -1005,6 +1062,35 @@ describe "Array" do
 
     it "cycles with N and iterator" do
       [1, 2, 3].cycle(2).to_a.should eq([1, 2, 3, 1, 2, 3])
+    end
+  end
+
+  describe "transpose" do
+    it "transeposes elements" do
+      [[:a, :b], [:c, :d], [:e, :f]].transpose.should eq([[:a, :c, :e], [:b, :d, :f]])
+      [[:a, :c, :e], [:b, :d, :f]].transpose.should eq([[:a, :b], [:c, :d], [:e, :f]])
+      [[:a]].transpose.should eq([[:a]])
+    end
+
+    it "transposes union of arrays" do
+      [[1, 2], [1.0, 2.0]].transpose.should eq([[1, 1.0], [2, 2.0]])
+      [[1, 2.0], [1, 2.0]].transpose.should eq([[1, 1], [2.0, 2.0]])
+      [[1, 1.0], ['a', "aaa"]].transpose.should eq([[1, 'a'], [1.0, "aaa"]])
+
+      typeof([[1.0], [1]].transpose).should eq(Array(Array(Int32 | Float64)))
+      typeof([[1, 1.0], ['a', "aaa"]].transpose).should eq(Array(Array(String | Int32 | Float64 | Char)))
+    end
+
+    it "transposes empty array" do
+      e = [] of Array(Int32)
+      e.transpose.empty?.should be_true
+      [e].transpose.empty?.should be_true
+      [e, e, e].transpose.empty?.should be_true
+    end
+
+    it "raises IndexError error when length of element is invalid" do
+      expect_raises(IndexError){ [[1], [1, 2]].transpose }
+      expect_raises(IndexError){ [[1, 2], [1]].transpose }
     end
   end
 end

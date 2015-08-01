@@ -27,7 +27,7 @@ struct Bool
     self ? true : other
   end
 
-  # Bitwise AND. Returns `true` if this bool and `other` and `true`, otherwise returns `false`.
+  # Bitwise AND. Returns `true` if this bool and `other` are `true`, otherwise returns `false`.
   #
   # ```
   # false & false #=> false
@@ -37,6 +37,18 @@ struct Bool
   # ```
   def &(other : Bool)
     self ? other : false
+  end
+
+  # Exclusive Or. Returns `true` if this bool is different from `other`, otherwise returns `false`.
+  #
+  # ```
+  # false ^ false #=> false
+  # false ^ true  #=> true
+  # true  ^ false #=> true
+  # true  ^ true  #=> false
+  # ```
+  def ^(other : Bool)
+    self != other
   end
 
   # Returns a hash value for this boolean: 0 for false, 1 for true.

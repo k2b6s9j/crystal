@@ -1,5 +1,3 @@
-require "tempfile"
-
 module Crystal
   class Program
     def push_def_macro(a_def)
@@ -53,12 +51,16 @@ module Crystal
         parser.parse_to_def(target_def)
       end
 
+      expected_type = target_def.type
+
       type_visitor = TypeVisitor.new(@program, vars, target_def)
       type_visitor.scope = owner
       generated_nodes.accept type_visitor
 
-      if generated_nodes.type != target_def.type
-        target_def.raise "expected '#{target_def.name}' to return #{target_def.type}, not #{generated_nodes.type}"
+      target_def.bind_to generated_nodes
+
+      if target_def.type != expected_type
+        target_def.raise "expected '#{target_def.name}' to return #{expected_type}, not #{target_def.type}"
       end
 
       target_def.body = generated_nodes
@@ -133,18 +135,17 @@ module Crystal
     def compile(filename)
       source = File.read(filename)
 
-      tempfile = Tempfile.new "crystal-run"
-      tempfile.close
-
       compiler = Compiler.new
 
       # Although release takes longer, once the bc is cached in .crystal
       # the subsequent times will make program execution faster.
       compiler.release = true
 
-      compiler.compile Compiler::Source.new(filename, source), tempfile.path
+      safe_filename = filename.gsub(/[^a-zA-Z\_\-\.]/, "_")
+      tempfile_path = Crystal.tempfile("macro-run-#{safe_filename}")
+      compiler.compile Compiler::Source.new(filename, source), tempfile_path
 
-      tempfile.path
+      tempfile_path
     end
 
     class MacroVisitor < Visitor
@@ -742,6 +743,21 @@ module Crystal
 
     def transform(node : Call)
       @yields[node.name]? || super
+    end
+
+    def transform(node : MacroLiteral)
+      # For the very rare case where a macro generates a macro,
+      # the macro's body won't be an AST node (won't be parsed).
+      # So, we use gsub to replace the yield values.
+      value = node.value
+
+      @yields.each do |name, node|
+        value = value.gsub(name) { node.to_s }
+      end
+
+      node.value = value
+
+      node
     end
   end
 end

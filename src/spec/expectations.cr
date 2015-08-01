@@ -240,40 +240,49 @@ module Spec
 
     ifdef darwin || linux
       macro expect_raises
-        %raised = false
-        begin
+        expect_raises(Exception) do
           {{yield}}
-        rescue
-          %raised = true
         end
-
-        fail "expected to raise" unless %raised
       end
 
       macro expect_raises(klass)
-        begin
+        expect_raises({{klass}}, nil) do
           {{yield}}
-          fail "expected to raise {{klass.id}}"
-        rescue {{klass.id}}
         end
       end
 
       macro expect_raises(klass, message)
+        %failed = false
         begin
           {{yield}}
-          fail "expected to raise {{klass.id}}"
+          %failed = true
+          fail "expected {{klass.id}} but nothing was raised"
         rescue %ex : {{klass.id}}
+          # We usually bubble Spec::AssertaionFailed, unless this is the expected exception
+          if %ex.class == Spec::AssertionFailed && {{klass}} != Spec::AssertionFailed
+            raise %ex
+          end
+
           %msg = {{message}}
           %ex_to_s = %ex.to_s
           case %msg
           when Regex
             unless (%ex_to_s =~ %msg)
-              fail "expected {{klass.id}}'s message to match #{ %msg }, but was #{ %ex_to_s.inspect }"
+              backtrace = %ex.backtrace.map { |f| "  # #{f}" }.join "\n"
+              fail "expected {{klass.id}} with message matching #{ %msg.inspect }, got #<#{ %ex.class }: #{ %ex_to_s }> with backtrace:\n#{backtrace}"
             end
           when String
             unless %ex_to_s.includes?(%msg)
-              fail "expected {{klass.id}}'s message to include #{ %msg.inspect }, but was #{ %ex_to_s.inspect }"
+              backtrace = %ex.backtrace.map { |f| "  # #{f}" }.join "\n"
+              fail "expected {{klass.id}} with #{ %msg.inspect }, got #<#{ %ex.class }: #{ %ex_to_s }> with backtrace:\n#{backtrace}"
             end
+          end
+        rescue %ex
+          if %failed
+            raise %ex
+          else
+            backtrace = %ex.backtrace.map { |f| "  # #{f}" }.join "\n"
+            fail "expected {{klass.id}}, got #{ %ex.class } with backtrace:\n#{backtrace}"
           end
         end
       end
@@ -282,20 +291,24 @@ module Spec
       end
     end
   end
+
+  module ObjectExtensions
+    def should(expectation, file = __FILE__, line = __LINE__)
+      unless expectation.match self
+        fail(expectation.failure_message, file, line)
+      end
+    end
+
+    def should_not(expectation, file = __FILE__, line = __LINE__)
+      if expectation.match self
+        fail(expectation.negative_failure_message, file, line)
+      end
+    end
+  end
 end
 
 include Spec::Expectations
 
 class Object
-  def should(expectation, file = __FILE__, line = __LINE__)
-    unless expectation.match self
-      fail(expectation.failure_message, file, line)
-    end
-  end
-
-  def should_not(expectation, file = __FILE__, line = __LINE__)
-    if expectation.match self
-      fail(expectation.negative_failure_message, file, line)
-    end
-  end
+  include Spec::ObjectExtensions
 end

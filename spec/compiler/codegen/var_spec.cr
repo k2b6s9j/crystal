@@ -116,4 +116,21 @@ describe "Code gen: var" do
       end
       ))
   end
+
+  it "works with typeof with assignment (#828)" do
+    run(%(
+      class String; def to_i; 0; end; end
+
+      a = 123
+      typeof(a = "hello")
+      a.to_i
+      )).to_i.should eq(123)
+  end
+
+  it "assigns to underscore" do
+    run(%(
+      _ = (b = 2)
+      b
+      )).to_i.should eq(2)
+  end
 end

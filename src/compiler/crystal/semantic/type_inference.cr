@@ -6,6 +6,12 @@ require "./*"
 module Crystal
   class Program
     def infer_type(node)
+      result = infer_type_intermediate(node)
+      finish_types
+      result
+    end
+
+    def infer_type_intermediate(node)
       node.accept TypeVisitor.new(self)
       expand_def_macros
       fix_empty_types node
@@ -175,12 +181,15 @@ module Crystal
 
         var.bind_to node
 
-        meta_var = new_meta_var(var.name)
+        meta_var = @meta_vars[var.name] ||= new_meta_var(var.name)
+        if (existing_type = meta_var.type?) && existing_type != node.type
+          node.raise "variable '#{var.name}' already declared with type #{existing_type}"
+        end
+
         meta_var.bind_to(var)
         meta_var.freeze_type = node.type
 
         @vars[var.name] = meta_var
-        @meta_vars[var.name] = meta_var
 
         check_exception_handler_vars(var.name, node)
       when InstanceVar
@@ -257,6 +266,11 @@ module Crystal
     end
 
     def visit(node : Global)
+      visit_global node
+      false
+    end
+
+    def visit_global(node)
       var = mod.global_vars[node.name]?
       unless var
         var = Var.new(node.name)
@@ -264,6 +278,7 @@ module Crystal
         mod.global_vars[node.name] = var
       end
       node.bind_to var
+      var
     end
 
     def visit(node : InstanceVar)
@@ -277,7 +292,14 @@ module Crystal
       end
     end
 
-    def end_visit(node : ReadInstanceVar)
+    def visit(node : ReadInstanceVar)
+      visit_read_instance_var node
+      false
+    end
+
+    def visit_read_instance_var(node)
+      node.obj.accept self
+
       obj_type = node.obj.type
       unless obj_type.is_a?(InstanceVarContainer)
         node.raise "#{obj_type} doesn't have instance vars"
@@ -289,14 +311,23 @@ module Crystal
       end
 
       node.bind_to ivar
+
+      ivar
     end
 
     def visit(node : ClassVar)
+      visit_class_var node
+      false
+    end
+
+    def visit_class_var(node)
       class_var = lookup_class_var(node)
       check_valid_attributes class_var, ValidClassVarAttributes, "class variable"
 
       node.attributes = class_var.attributes
       node.bind_to class_var
+
+      class_var
     end
 
     def lookup_instance_var(node)
@@ -306,7 +337,9 @@ module Crystal
       when Program
         node.raise "can't use instance variables at the top level"
       when PrimitiveType
-        node.raise "can't use instance variables inside #{scope}"
+        node.raise "can't use instance variables inside primitive types (at #{scope})"
+      when EnumType
+        node.raise "can't use instance variables inside enums (at enum #{scope})"
       when .metaclass?
         node.raise "@instance_vars are not yet allowed in metaclasses: use @@class_vars instead"
       when InstanceVarContainer
@@ -409,17 +442,19 @@ module Crystal
       end
     end
 
-    def type_assign_helper(var_name, target, value)
-    end
-
     def type_assign(target : InstanceVar, value, node)
       # Check if this is an instance variable initializer
       unless @scope
         current_type = current_type()
         if current_type.is_a?(ClassType)
+          @mod.after_inference_types << current_type
+
           ivar_visitor = TypeVisitor.new(mod)
           ivar_visitor.scope = current_type
-          value.accept ivar_visitor
+
+          unless current_type.is_a?(GenericType)
+            value.accept ivar_visitor
+          end
 
           current_type.add_instance_var_initializer(target.name, value, ivar_visitor.meta_vars)
           if current_type.is_a?(GenericType)
@@ -521,6 +556,11 @@ module Crystal
 
       node.bind_to value
       var.bind_to node
+    end
+
+    def type_assign(target : Underscore, value, node)
+      value.accept self
+      node.bind_to value
     end
 
     def type_assign(target, value, node)
@@ -718,6 +758,8 @@ module Crystal
     end
 
     def visit(node : FunLiteral)
+      return false if node.type?
+
       fun_vars = @vars.dup
       meta_vars = @meta_vars.dup
 
@@ -726,7 +768,9 @@ module Crystal
         # when converting a block to a fun literal
         if restriction = arg.restriction
           restriction.accept self
-          arg.type = restriction.type.instance_type.virtual_type
+          arg_type = restriction.type.instance_type
+          TypeVisitor.check_type_allowed_as_proc_argument(node, arg_type)
+          arg.type = arg_type.virtual_type
         elsif !arg.type?
           arg.raise "function argument '#{arg.name}' must have a type"
         end
@@ -758,6 +802,13 @@ module Crystal
       node.def.body.accept block_visitor
 
       false
+    end
+
+    def self.check_type_allowed_as_proc_argument(node, type)
+      return if type.allowed_in_generics?
+
+      type = type.union_types.find { |t| !t.allowed_in_generics? } if type.is_a?(UnionType)
+      node.raise "can't use #{type} as a Proc argument type yet, use a more specific type"
     end
 
     def visit(node : FunPointer)
@@ -1264,10 +1315,10 @@ module Crystal
       # Make sure to delete variables declared by the macro, so that they
       # are not visible afterwards. However, keep the ones that start with
       # double underscore because those are generated by the compiler in case
-      # like `x && y`.
+      # like `x && y`. Also preserve special vars.
       if old_var_names.length != @vars.length
         @vars.delete_if do |name, var|
-          !name.starts_with?("__") && !old_var_names.includes?(name)
+          !name.starts_with?('$') && !name.starts_with?("__") && !old_var_names.includes?(name)
         end
       end
 
@@ -1276,17 +1327,16 @@ module Crystal
 
     def visit(node : Return)
       node.raise "can't return from top level" unless @typed_def
-      true
-    end
 
-    def end_visit(node : Return)
+      node.exp.try &.accept self
+
+      node.target = @typed_def
+
       typed_def = @typed_def.not_nil!
-      if exp = node.exp
-        typed_def.bind_to exp
-      else
-        typed_def.bind_to mod.nil_var
-      end
+      typed_def.bind_to(node.exp || mod.nil_var)
       @unreachable = true
+
+      false
     end
 
     def visit(node : Generic)
@@ -1329,7 +1379,11 @@ module Crystal
     end
 
     def visit(node : Underscore)
-      node.raise "can't use underscore as generic type argument"
+      if @in_type_args == 0
+        node.raise "can't read from _"
+      else
+        node.raise "can't use underscore as generic type argument"
+      end
     end
 
     def visit(node : IsA)
@@ -2409,22 +2463,20 @@ module Crystal
     end
 
     def end_visit(node : Break)
-      container = @while_stack.last? || (block.try &.break)
-      node.raise "Invalid break" unless container
+      if target_block = block
+        node.target = target_block
 
-      if container.is_a?(While)
-        container.has_breaks = true
+        target_block.break.bind_to(node.exp || mod.nil_var)
 
-        break_vars = (container.break_vars = container.break_vars || [] of MetaVars)
+        bind_vars @vars, target_block.after_vars
+      elsif target_while = @while_stack.last?
+        node.target = target_while
+        target_while.has_breaks = true
+
+        break_vars = (target_while.break_vars ||= [] of MetaVars)
         break_vars.push @vars.dup
       else
-        if exp = node.exp
-          container.bind_to(exp)
-        else
-          container.bind_to mod.nil_var
-        end
-
-        bind_vars @vars, block.not_nil!.after_vars
+        node.raise "Invalid break"
       end
 
       @unreachable = true
@@ -2432,14 +2484,18 @@ module Crystal
 
     def end_visit(node : Next)
       if block = @block
+        node.target = block
+
         block.bind_to(node.exp || mod.nil_var)
 
         bind_vars @vars, block.vars
         bind_vars @vars, block.after_vars
-      elsif @while_stack.empty?
-        node.raise "Invalid next"
-      else
+      elsif target_while = @while_stack.last?
+        node.target = target_while
+
         bind_vars @vars, @while_vars
+      else
+        node.raise "Invalid next"
       end
 
       @unreachable = true
@@ -2621,6 +2677,10 @@ module Crystal
               meta_var
             when InstanceVar
               lookup_instance_var node_exp
+            when ClassVar
+              visit_class_var node_exp
+            when Global
+              visit_global node_exp
             when Path
               node_exp.accept self
               if const = node_exp.target_const
@@ -2628,6 +2688,8 @@ module Crystal
               else
                 node_exp.raise "can't take address of #{node_exp}"
               end
+            when ReadInstanceVar
+              visit_read_instance_var node_exp
             else
               node_exp.raise "can't take address of #{node_exp}"
             end
@@ -2635,6 +2697,10 @@ module Crystal
     end
 
     def visit(node : TypeOf)
+      # A typeof shouldn't change the type of variables:
+      # so we keep the ones before it and restore them at the end
+      old_vars = @vars.dup
+
       node.in_type_args = @in_type_args > 0
 
       old_in_type_args = @in_type_args
@@ -2647,6 +2713,8 @@ module Crystal
       @in_type_args = old_in_type_args
 
       node.bind_to node.expressions
+
+      @vars = old_vars
 
       false
     end
@@ -2863,6 +2931,21 @@ module Crystal
       node.raise "can't apply visibility modifier"
     end
 
+    def visit(node : Asm)
+      if output = node.output
+        ptrof = PointerOf.new(output.exp).at(output.exp)
+        ptrof.accept self
+        node.ptrof = ptrof
+      end
+
+      if inputs = node.inputs
+        inputs.each &.exp.accept self
+      end
+
+      node.type = @mod.void
+      false
+    end
+
     def include_in(current_type, node, kind)
       node_name = node.name
       type = lookup_path_type(node_name)
@@ -2894,7 +2977,7 @@ module Crystal
         current_type.include module_to_include
         run_hooks type.metaclass, current_type, kind, node
       rescue ex : TypeException
-        node_name.raise ex.message
+        node.raise "at '#{kind}' hook", ex
       end
     end
 
@@ -3187,7 +3270,6 @@ module Crystal
       node.type = mod.string
     end
 
-
     def visit(node : RegexLiteral)
       expand(node)
     end
@@ -3249,6 +3331,27 @@ module Crystal
       else
         expand(node)
       end
+    end
+
+    def visit(node : And)
+      expand(node)
+    end
+
+    def visit(node : Or)
+      expand(node)
+    end
+
+    def visit(node : RangeLiteral)
+      expand(node)
+    end
+
+    def visit(node : StringInterpolation)
+      expand(node)
+    end
+
+    def visit(node : Case)
+      expand(node)
+      false
     end
 
     def expand(node)
@@ -3453,9 +3556,7 @@ module Crystal
       @types.pop
     end
 
-    def visit(node : And | Or | Require | RangeLiteral | Case |
-                     When | Unless | StringInterpolation | MultiAssign |
-                     Until | MacroLiteral)
+    def visit(node : Require | When | Unless | MultiAssign | Until | MacroLiteral)
       raise "Bug: #{node.class_desc} node '#{node}' (#{node.location}) should have been eliminated in normalize"
     end
   end

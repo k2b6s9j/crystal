@@ -11,6 +11,14 @@ module Crystal
 
     @dirty = false
 
+    def type
+      @type || ::raise "Bug: `#{self}` at #{self.location} has no type"
+    end
+
+    def type?
+      @type
+    end
+
     def set_type(type : Type)
       type = type.remove_alias_if_simple
       if (freeze_type = @freeze_type) && !freeze_type.is_restriction_of_all?(type)
@@ -519,6 +527,18 @@ module Crystal
     @has_breaks = false
   end
 
+  class Break
+    property! target
+  end
+
+  class Next
+    property! target
+  end
+
+  class Return
+    property! target
+  end
+
   class FunPointer
     property! :call
 
@@ -540,7 +560,10 @@ module Crystal
     property :expanded
   end
 
-  {% for name in %w(ArrayLiteral HashLiteral RegexLiteral MacroExpression MacroIf MacroFor) %}
+  {% for name in %w(And Or
+                    ArrayLiteral HashLiteral RegexLiteral RangeLiteral
+                    Case StringInterpolation
+                    MacroExpression MacroIf MacroFor) %}
     class {{name.id}}
       include ExpandableNode
     end
@@ -602,4 +625,8 @@ module Crystal
       end
     end
   {% end %}
+
+  class Asm
+    property ptrof
+  end
 end

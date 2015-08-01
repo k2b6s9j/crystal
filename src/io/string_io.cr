@@ -36,6 +36,24 @@ class StringIO
     count
   end
 
+  def gets(delimiter : Char)
+    if delimiter.ord >= 128
+      return super
+    end
+
+    index = (@buffer + @pos).to_slice(@bytesize - @pos).index(delimiter.ord)
+    if index
+      index += 1
+    else
+      index = @bytesize - @pos
+      return nil if index == 0
+    end
+
+    string = String.new(@buffer + @pos, index)
+    @pos += index
+    string
+  end
+
   def clear
     @bytesize = 0
   end
@@ -47,6 +65,17 @@ class StringIO
   def rewind
     @pos = 0
     self
+  end
+
+  def close
+    # Do nothing
+    # TODO: maybe we do want to allow closing a StringIO,
+    # although we would have to make a check every time
+    # we read/write...
+  end
+
+  def closed?
+    false
   end
 
   def to_s

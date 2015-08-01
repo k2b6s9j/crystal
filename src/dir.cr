@@ -352,7 +352,7 @@ class Dir
     File::Stat.new(stat).directory?
   end
 
-  def self.mkdir(path, mode=0777)
+  def self.mkdir(path, mode=0o777)
     ifdef darwin || linux
       status = LibC.mkdir(path, LibC::ModeT.cast(mode))
     elsif windows
@@ -364,7 +364,7 @@ class Dir
     0
   end
 
-  def self.mkdir_p(path, mode=0777)
+  def self.mkdir_p(path, mode=0o777)
     return 0 if Dir.exists?(path)
 
     components = path.split(File::SEPARATOR)

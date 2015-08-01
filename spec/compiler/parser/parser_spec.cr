@@ -199,6 +199,7 @@ describe "Parser" do
   it_parses "a = 1; a /b", [Assign.new("a".var, 1.int32), Call.new("a".var, "/", "b".call)]
   it_parses "a = 1; a/b", [Assign.new("a".var, 1.int32), Call.new("a".var, "/", "b".call)]
   it_parses "a = 1; (a)/b", [Assign.new("a".var, 1.int32), Call.new(Expressions.new(["a".var] of ASTNode), "/", "b".call)]
+  it_parses "_ = 1", Assign.new(Underscore.new, 1.int32)
 
   it_parses "!1", Call.new(1.int32, "!")
   it_parses "- 1", Call.new(1.int32, "-")
@@ -214,6 +215,7 @@ describe "Parser" do
 
   it_parses "a, b = 1, 2", MultiAssign.new(["a".var, "b".var] of ASTNode, [1.int32, 2.int32] of ASTNode)
   it_parses "a, b = 1", MultiAssign.new(["a".var, "b".var] of ASTNode, [1.int32] of ASTNode)
+  it_parses "_, _ = 1, 2", MultiAssign.new([Underscore.new, Underscore.new] of ASTNode, [1.int32, 2.int32] of ASTNode)
   it_parses "a[0], a[1] = 1, 2", MultiAssign.new([Call.new("a".call, "[]", 0.int32), Call.new("a".call, "[]", 1.int32)] of ASTNode, [1.int32, 2.int32] of ASTNode)
   it_parses "a.foo, a.bar = 1, 2", MultiAssign.new([Call.new("a".call, "foo"), Call.new("a".call, "bar")] of ASTNode, [1.int32, 2.int32] of ASTNode)
   it_parses "x = 0; a, b = x += 1", [Assign.new("x".var, 0.int32), MultiAssign.new(["a".var, "b".var] of ASTNode, [Assign.new("x".var, Call.new("x".var, "+", 1.int32))] of ASTNode)] of ASTNode
@@ -250,6 +252,7 @@ describe "Parser" do
   it_parses "def foo; a = 1; a {}; end", Def.new("foo", body: [Assign.new("a".var, 1.int32), Call.new(nil, "a", block: Block.new)] of ASTNode)
   it_parses "def foo; a = 1; x { a }; end", Def.new("foo", body: [Assign.new("a".var, 1.int32), Call.new(nil, "x", block: Block.new(body: ["a".var] of ASTNode))] of ASTNode)
   it_parses "def foo; x { |a| a }; end", Def.new("foo", body: [Call.new(nil, "x", block: Block.new(["a".var], ["a".var] of ASTNode))] of ASTNode)
+  it_parses "def foo; x { |_| 1 }; end", Def.new("foo", body: [Call.new(nil, "x", block: Block.new(["_".var], [1.int32] of ASTNode))] of ASTNode)
 
   it_parses "def foo(var = 1); end", Def.new("foo", [Arg.new("var", 1.int32)])
   it_parses "def foo var = 1; end", Def.new("foo", [Arg.new("var", 1.int32)])
@@ -437,6 +440,7 @@ describe "Parser" do
   it_parses "class Foo\ndef foo; end; end", ClassDef.new("Foo".path, [Def.new("foo")] of ASTNode)
   it_parses "class Foo < Bar; end", ClassDef.new("Foo".path, superclass: "Bar".path)
   it_parses "class Foo(T); end", ClassDef.new("Foo".path, type_vars: ["T"])
+  it_parses "class Foo(T1); end", ClassDef.new("Foo".path, type_vars: ["T1"])
   it_parses "abstract class Foo; end", ClassDef.new("Foo".path, abstract: true)
   it_parses "abstract struct Foo; end", ClassDef.new("Foo".path, abstract: true, struct: true)
 
@@ -480,6 +484,22 @@ describe "Parser" do
 
   it_parses "1 ? 2 : 3", If.new(1.int32, 2.int32, 3.int32)
   it_parses "1 ? a : b", If.new(1.int32, "a".call, "b".call)
+  it_parses "1 ? a : b ? c : 3", If.new(1.int32, "a".call, If.new("b".call, "c".call, 3.int32))
+  it_parses "a ? 1 : b ? 2 : c ? 3 : 0", If.new("a".call, 1.int32, If.new("b".call, 2.int32, If.new("c".call, 3.int32, 0.int32)))
+  it_parses "a ? 1
+             : b", If.new("a".call, 1.int32, "b".call)
+  it_parses "a ? 1 :
+             b ? 2 :
+             c ? 3
+             : 0", If.new("a".call, 1.int32, If.new("b".call, 2.int32, If.new("c".call, 3.int32, 0.int32)))
+  it_parses "a ? 1
+             : b ? 2
+             : c ? 3
+             : 0", If.new("a".call, 1.int32, If.new("b".call, 2.int32, If.new("c".call, 3.int32, 0.int32)))
+  it_parses "a ?
+             b ? b1 : b2
+             : c ? 3
+             : 0", If.new("a".call, If.new("b".call, "b1".call, "b2".call), If.new("c".call, 3.int32, 0.int32))
 
   it_parses "1 if 3", If.new(3.int32, 1.int32)
   it_parses "1 unless 3", Unless.new(3.int32, 1.int32)
@@ -497,6 +517,13 @@ describe "Parser" do
   it_parses "puts a unless true", Unless.new(true.bool, Call.new(nil, "puts", "a".call))
   it_parses "puts a while true", While.new(true.bool, Call.new(nil, "puts", "a".call), run_once: true)
   it_parses "puts ::foo", Call.new(nil, "puts", Call.new(nil, "foo", global: true))
+
+  it_parses "puts __FILE__", Call.new(nil, "puts", "/foo/bar/baz.cr".string)
+  it_parses "puts __DIR__", Call.new(nil, "puts", "/foo/bar".string)
+  it_parses "puts __LINE__", Call.new(nil, "puts", 1.int32)
+  it_parses "puts _", Call.new(nil, "puts", Underscore.new)
+
+  it_parses "x = 2; foo do bar x end", [Assign.new("x".var, 2.int32), Call.new(nil, "foo", block: Block.new(body: Call.new(nil, "bar", "x".var)))] of ASTNode
 
   { {"break", Break}, {"return", Return}, {"next", Next} }.each do |tuple|
     keyword, klass = tuple
@@ -650,9 +677,9 @@ describe "Parser" do
 
   it_parses "A = 1", Assign.new("A".path, 1.int32)
 
-  it_parses "puts %w(one two)", Call.new(nil, "puts", (["one".string, "two".string] of ASTNode).array)
-  it_parses "puts %w{one two}", Call.new(nil, "puts", (["one".string, "two".string] of ASTNode).array)
-  it_parses "puts %i(one two)", Call.new(nil, "puts", (["one".symbol, "two".symbol] of ASTNode).array)
+  it_parses "puts %w(one two)", Call.new(nil, "puts", (["one".string, "two".string] of ASTNode).array_of(Path.global("String")))
+  it_parses "puts %w{one two}", Call.new(nil, "puts", (["one".string, "two".string] of ASTNode).array_of(Path.global("String")))
+  it_parses "puts %i(one two)", Call.new(nil, "puts", (["one".symbol, "two".symbol] of ASTNode).array_of(Path.global("Symbol")))
   it_parses "puts {{1}}", Call.new(nil, "puts", MacroExpression.new(1.int32))
   it_parses "puts {{\n1\n}}", Call.new(nil, "puts", MacroExpression.new(1.int32))
   it_parses "puts {{*1}}", Call.new(nil, "puts", MacroExpression.new(1.int32.splat))
@@ -726,6 +753,7 @@ describe "Parser" do
   it_parses "/foo/imximx", regex("foo", Regex::Options::IGNORE_CASE | Regex::Options::MULTILINE | Regex::Options::EXTENDED)
   it_parses "/fo\\so/", regex("fo\\so")
   it_parses "/fo\#{1}o/", RegexLiteral.new(StringInterpolation.new(["fo".string, 1.int32, "o".string] of ASTNode))
+  it_parses "/(fo\#{\"bar\"}\#{1}o)/", RegexLiteral.new(StringInterpolation.new(["(fo".string, "bar".string, 1.int32, "o)".string] of ASTNode))
   it_parses "%r(foo(bar))", regex("foo(bar)")
   it_parses "/ /", regex(" ")
   it_parses "/ hi /", regex(" hi ")
@@ -754,6 +782,7 @@ describe "Parser" do
   it_parses "$~", Call.new("$~".var, "not_nil!")
   it_parses "$~.foo", Call.new(Call.new("$~".var, "not_nil!"), "foo")
   it_parses "$1", Call.new(Call.new("$~".var, "not_nil!"), "[]", 1.int32)
+  it_parses "$1?", Call.new(Call.new("$~".var, "not_nil!"), "[]?", 1.int32)
   it_parses "foo $1", Call.new(nil, "foo", Call.new(Call.new("$~".var, "not_nil!"), "[]", 1.int32))
   it_parses "$~ = 1", Assign.new("$~".var, 1.int32)
 
@@ -1023,6 +1052,18 @@ describe "Parser" do
   it_parses "a.b / 2", Call.new(Call.new("a".call, "b"), "/", 2.int32)
   it_parses "a/b", Call.new("a".call, "/", "b".call)
 
+  it_parses %(asm("nop" \n)), Asm.new("nop")
+  it_parses %(asm("nop" : : )), Asm.new("nop")
+  it_parses %(asm("nop" ::)), Asm.new("nop")
+  it_parses %(asm("nop" : "a"(0))), Asm.new("nop", AsmOperand.new("a", 0.int32))
+  it_parses %(asm("nop" : "a"(0) : "b"(1))), Asm.new("nop", AsmOperand.new("a", 0.int32), [AsmOperand.new("b", 1.int32)])
+  it_parses %(asm("nop" : "a"(0) : "b"(1), "c"(2))), Asm.new("nop", AsmOperand.new("a", 0.int32), [AsmOperand.new("b", 1.int32), AsmOperand.new("c", 2.int32)])
+  it_parses %(asm("nop" :: "b"(1), "c"(2))), Asm.new("nop", inputs: [AsmOperand.new("b", 1.int32), AsmOperand.new("c", 2.int32)])
+  it_parses %(asm(\n"nop"\n:\n"a"(0)\n:\n"b"(1),\n"c"(2)\n)), Asm.new("nop", AsmOperand.new("a", 0.int32), [AsmOperand.new("b", 1.int32), AsmOperand.new("c", 2.int32)])
+  it_parses %(asm("nop" :: "b"(1), "c"(2) : "eax", "ebx" : "volatile", "alignstack", "intel")), Asm.new("nop", inputs: [AsmOperand.new("b", 1.int32), AsmOperand.new("c", 2.int32)], clobbers: %w(eax ebx), volatile: true, alignstack: true, intel: true)
+  it_parses %(asm("nop" :: "b"(1), "c"(2) : "eax", "ebx"\n: "volatile", "alignstack"\n,\n"intel"\n)), Asm.new("nop", inputs: [AsmOperand.new("b", 1.int32), AsmOperand.new("c", 2.int32)], clobbers: %w(eax ebx), volatile: true, alignstack: true, intel: true)
+  it_parses %(asm("nop" :::: "volatile")), Asm.new("nop", volatile: true)
+
   %w(def macro class struct module fun alias abstract include extend lib).each do |keyword|
     assert_syntax_error "def foo\n#{keyword}\nend"
   end
@@ -1121,6 +1162,10 @@ describe "Parser" do
                       "can't change the value of self"
   assert_syntax_error "self += 1",
                       "can't change the value of self"
+  assert_syntax_error "self, x = 1, 2",
+                      "can't change the value of self"
+  assert_syntax_error "x, self = 1, 2",
+                      "can't change the value of self"
 
   assert_syntax_error "macro foo(x : Int32); end"
 
@@ -1128,4 +1173,7 @@ describe "Parser" do
   assert_syntax_error "module Foo(Something); end", "type variables can only be single letters"
 
   assert_syntax_error "/foo)/", "invalid regex"
+  assert_syntax_error "def =\nend"
+  assert_syntax_error "def foo; A = 1; end", "dynamic constant assignment"
 end
+

@@ -55,7 +55,7 @@ module Crystal
     end
 
     macro def class_desc : String
-      {{@type.name.split("::").last.id.stringify }}
+      {{@type.name.split("::").last.id.stringify}}
     end
   end
 
@@ -244,7 +244,7 @@ module Crystal
 
   # An array literal.
   #
-  #  '[' ( expression ( ',' expression )* ) ']'
+  #  '[' [ expression [ ',' expression ]* ] ']'
   #
   class ArrayLiteral < ASTNode
     property :elements
@@ -417,7 +417,7 @@ module Crystal
   #
   #     [ obj '.' ] name '(' ')' [ block ]
   #   |
-  #     [ obj '.' ] name '(' arg [ ',' arg ]* ')' [ block]
+  #     [ obj '.' ] name '(' arg [ ',' arg ]* ')' [ block ]
   #   |
   #     [ obj '.' ] name arg [ ',' arg ]* [ block ]
   #   |
@@ -829,15 +829,15 @@ module Crystal
 
   # A method definition.
   #
-  #     [ receiver '.' ] 'def' name
+  #     'def' [ receiver '.' ] name
   #       body
   #     'end'
   #   |
-  #     [ receiver '.' ] 'def' name '(' [ arg [ ',' arg ]* ] ')'
+  #     'def' [ receiver '.' ] name '(' [ arg [ ',' arg ]* ] ')'
   #       body
   #     'end'
   #   |
-  #     [ receiver '.' ] 'def' name arg [ ',' arg ]*
+  #     'def' [ receiver '.' ] name arg [ ',' arg ]*
   #       body
   #     'end'
   #
@@ -1587,7 +1587,7 @@ module Crystal
       LibDef.new(@name, @body.clone, @name_column_number)
     end
 
-    def_equals_and_hash @name, @libname, @body
+    def_equals_and_hash @name, @body
   end
 
   class FunDef < ASTNode
@@ -2025,6 +2025,48 @@ module Crystal
     end
 
     def_equals_and_hash name
+  end
+
+  class Asm < ASTNode
+    property text
+    property output
+    property inputs
+    property clobbers
+    property volatile
+    property alignstack
+    property intel
+
+    def initialize(@text, @output = nil, @inputs = nil, @clobbers = nil, @volatile = false, @alignstack = false, @intel = false)
+    end
+
+    def accept_children(visitor)
+      @output.try &.accept visitor
+      @inputs.try &.each &.accept visitor
+    end
+
+    def clone_without_location
+      Asm.new(@text, @output.clone, @inputs.clone, @clobbers, @volatile, @alignstack, @intel)
+    end
+
+    def_equals_and_hash text, output, inputs, clobbers, volatile, alignstack, intel
+  end
+
+  class AsmOperand < ASTNode
+    property constraint
+    property exp
+
+    def initialize(@constraint, @exp)
+    end
+
+    def accept_children(visitor)
+      @exp.accept visitor
+    end
+
+    def clone_without_location
+      AsmOperand.new(@constraint, @exp)
+    end
+
+    def_equals_and_hash constraint, exp
   end
 
   # Ficticious node to represent primitives

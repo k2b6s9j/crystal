@@ -17,7 +17,7 @@ module ENV
     if value
       value
     else
-      raise MissingKey.new "Missing ENV key: #{key}"
+      raise KeyError.new "Missing ENV key: #{key}"
     end
   end
 

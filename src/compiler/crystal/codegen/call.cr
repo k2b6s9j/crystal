@@ -1,8 +1,9 @@
-class Crystal::CodeGenVisitor < Crystal::Visitor
+require "./codegen"
+
+class Crystal::CodeGenVisitor
   def visit(node : Call)
-    if expanded = node.expanded
-      accept expanded
-      return false
+    if node.expanded
+      raise "Bug: #{node} at #{node.location} should have been expanded"
     end
 
     target_defs = node.target_defs
@@ -229,6 +230,7 @@ class Crystal::CodeGenVisitor < Crystal::Visitor
         context.reset_closure
 
         target_def = node.target_def
+        target_def.ensure_exception_handler = current_ensure_exception_handler
 
         alloca_vars target_def.vars, target_def
         create_local_copy_of_block_args(target_def, self_type, call_args)
@@ -369,9 +371,9 @@ class Crystal::CodeGenVisitor < Crystal::Visitor
   end
 
   def codegen_call_or_invoke(node, target_def, self_type, func, call_args, raises, type, is_closure = false, fun_type = nil)
-    if raises && (handler = @exception_handlers.try &.last?) && (catch_block = handler.catch_block)
+    if raises && (rescue_block = @rescue_block)
       invoke_out_block = new_block "invoke_out"
-      @last = builder.invoke func, call_args, invoke_out_block, catch_block
+      @last = builder.invoke func, call_args, invoke_out_block, rescue_block
       position_at_end invoke_out_block
     else
       @last = call func, call_args

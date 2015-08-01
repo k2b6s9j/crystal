@@ -21,9 +21,14 @@ describe "Regex" do
     $2.should eq("ba")
   end
 
+  it "does =~" do
+    (/foo/ =~ "bar foo baz").should eq(4)
+    $~.length.should eq(0)
+  end
+
   it "raises if outside match range with []" do
     "foo" =~ /foo/
-    expect_raises(IndexOutOfBounds) { $1 }
+    expect_raises(IndexError) { $1 }
   end
 
   describe "name_table" do
@@ -40,7 +45,7 @@ describe "Regex" do
   describe "MatchData#[]" do
     it "raises if outside match range with []" do
       "foo" =~ /foo/
-      expect_raises(IndexOutOfBounds) { $~[1] }
+      expect_raises(IndexError) { $~[1] }
     end
 
     it "capture named group" do
@@ -49,9 +54,16 @@ describe "Regex" do
       $~["g2"].should eq("ba")
     end
 
-    it "capture empty group" do
-      ("foo" =~ /(?<g1>.*)foo/).should eq(0)
+    it "captures empty group" do
+      ("foo" =~ /(?<g1>z?)foo/).should eq(0)
+      $~[1].should eq("")
       $~["g1"].should eq("")
+    end
+
+    it "raises exception on optional empty group" do
+      ("foo" =~ /(?<g1>z)?foo/).should eq(0)
+      expect_raises(Exception) { $~[1] }
+      expect_raises(Exception) { $~["g1"] }
     end
 
     it "raises exception when named group doesn't exist" do
@@ -73,8 +85,15 @@ describe "Regex" do
     end
 
     it "capture empty group" do
-      ("foo" =~ /(?<g1>.*)foo/).should eq(0)
+      ("foo" =~ /(?<g1>z?)foo/).should eq(0)
+      $~[1]?.should eq("")
       $~["g1"]?.should eq("")
+    end
+
+    it "capture optional empty group" do
+      ("foo" =~ /(?<g1>z)?foo/).should eq(0)
+      $~[1]?.should be_nil
+      $~["g1"]?.should be_nil
     end
 
     it "returns nil exception when named group doesn't exist" do
@@ -101,6 +120,7 @@ describe "Regex" do
     /f(?<lettero>o)(?<letterx>x)/.match("the fox").to_s.should eq(%(#<MatchData "fox" lettero:"o" letterx:"x">))
     /fox/.match("the fox").to_s.should eq(%(#<MatchData "fox">))
     /f(o)(x)/.match("the fox").inspect.should eq(%(#<MatchData "fox" 1:"o" 2:"x">))
+    /f(o)(x)?/.match("the fort").inspect.should eq(%(#<MatchData "fo" 1:"o" 2:nil>))
     /fox/.match("the fox").inspect.should eq(%(#<MatchData "fox">))
   end
 
@@ -123,5 +143,10 @@ describe "Regex" do
   it "compare to other instances" do
     Regex.new("foo").should eq(Regex.new("foo"))
     Regex.new("foo").should_not eq(Regex.new("bar"))
+  end
+
+  it "matches lines beginnings on ^ in multiline mode" do
+    ("foo\nbar" =~ /^bar/).should be_nil
+    ("foo\nbar" =~ /^bar/m).should eq(4)
   end
 end

@@ -165,6 +165,24 @@ describe "Lexer macro" do
     token.type.should eq(:MACRO_END)
   end
 
+  {"class", "struct"}.each do |keyword|
+    it "lexes macro with nested abstract #{keyword}" do
+      lexer = Lexer.new(%(hello\n  abstract #{keyword} Foo; end; end))
+
+      token = lexer.next_macro_token(Token::MacroState.default, false)
+      token.type.should eq(:MACRO_LITERAL)
+      token.value.should eq("hello\n  abstract #{keyword} Foo; ")
+      token.macro_state.nest.should eq(1)
+
+      token = lexer.next_macro_token(token.macro_state, false)
+      token.type.should eq(:MACRO_LITERAL)
+      token.value.should eq("end; ")
+
+      token = lexer.next_macro_token(token.macro_state, false)
+      token.type.should eq(:MACRO_END)
+    end
+  end
+
   it "reaches end" do
     lexer = Lexer.new(%(fail))
 
@@ -517,5 +535,13 @@ describe "Lexer macro" do
     token = lexer.next_token
     token.type.should eq(:IDENT)
     token.value.should eq("op")
+  end
+
+  it "lexes escaped quote inside string (#895)" do
+    lexer = Lexer.new(%("\\"" end))
+
+    token = lexer.next_macro_token(Token::MacroState.default, false)
+    token.type.should eq(:MACRO_LITERAL)
+    token.value.should eq(%("\\"" ))
   end
 end

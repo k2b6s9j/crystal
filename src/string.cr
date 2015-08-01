@@ -21,7 +21,7 @@ end
 #
 # A backslash can be used to denote some characters inside the string:
 #
-# ```text
+# ```
 # "\"" # double quote
 # "\\" # backslash
 # "\e" # escape
@@ -99,7 +99,7 @@ end
 #
 # To create a String with embedded expressions, you can use string interpolation:
 #
-# ```text
+# ```
 # a = 1
 # b = 2
 # "sum = #{a + b}"        # "sum = 3"
@@ -453,7 +453,7 @@ class String
   end
 
   private def to_u64_info(base, whitespace, underscore, prefix, strict)
-    raise "Invalid base #{base}" unless 2 <= base <= 36
+    raise ArgumentError.new "invalid base #{base}" unless 2 <= base <= 36
 
     ptr = cstr
 
@@ -589,7 +589,7 @@ class String
     end
   end
 
-  # Returns the `Char` at the give index, or raises `IndexOutOfBounds` if out of bounds.
+  # Returns the `Char` at the give index, or raises `IndexError` if out of bounds.
   #
   # Negative indices can be used to start counting from the end of the string.
   #
@@ -598,17 +598,17 @@ class String
   # "hello"[1]  # 'e'
   # "hello"[-1] # 'o'
   # "hello"[-2] # 'l'
-  # "hello"[5]  # raises IndexOutOfBounds
+  # "hello"[5]  # raises IndexError
   # ```
   def [](index : Int)
-    at(index) { raise IndexOutOfBounds.new }
+    at(index) { raise IndexError.new }
   end
 
   # Returns a substring by using a Range's *begin* and *end*
   # as character indices. Indices can be negative to start
   # counting from the end of the string.
   #
-  # Raises `IndexOutOfBounds` if the range's start is not in range.
+  # Raises `IndexError` if the range's start is not in range.
   #
   # ```
   # "hello"[0..2]  # "hel"
@@ -633,7 +633,7 @@ class String
   # The `start` argument can be negative to start counting
   # from the end of the string.
   #
-  # Raises `IndexOutOfBounds` if `start` isn't in range.
+  # Raises `IndexError` if `start` isn't in range.
   #
   # Raises `ArgumentError` if `count` is negative.
   def [](start : Int, count : Int)
@@ -678,7 +678,7 @@ class String
         raise ArgumentError.new "negative count"
       end
     else
-      raise IndexOutOfBounds.new
+      raise IndexError.new
     end
   end
 
@@ -712,7 +712,7 @@ class String
   end
 
   def at(index : Int)
-    at(index) { raise IndexOutOfBounds }
+    at(index) { raise IndexError }
   end
 
   def at(index : Int)
@@ -754,7 +754,7 @@ class String
         raise ArgumentError.new "negative count"
       end
     else
-      raise IndexOutOfBounds.new
+      raise IndexError.new
     end
   end
 
@@ -771,7 +771,7 @@ class String
   end
 
   def byte_at(index)
-    byte_at(index) { raise IndexOutOfBounds.new }
+    byte_at(index) { raise IndexError.new }
   end
 
   def byte_at?(index)
@@ -825,13 +825,13 @@ class String
     return self if bytesize == 0
 
     case cstr[bytesize - 1]
-    when '\n'.ord
-      if bytesize > 1 && cstr[bytesize - 2] == '\r'.ord
+    when '\n'
+      if bytesize > 1 && cstr[bytesize - 2] === '\r'
         byte_slice 0, bytesize - 2
       else
         byte_slice 0, bytesize - 1
       end
-    when '\r'.ord
+    when '\r'
       byte_slice 0, bytesize - 1
     else
       self
@@ -855,8 +855,8 @@ class String
       return self if empty?
 
       pos = bytesize - 1
-      while pos > 0 && cstr[pos] == '\n'.ord
-        if pos > 1 && cstr[pos - 1] == '\r'.ord
+      while pos > 0 && cstr[pos] === '\n'
+        if pos > 1 && cstr[pos - 1] === '\r'
           pos -= 2
         else
           pos -= 1
@@ -870,10 +870,41 @@ class String
     end
   end
 
+  # Returns a new String with the last character removed.
+  # If the string ends with `\r\n`, both characters are removed.
+  # Applying chop to an empty string returns an empty string.
+  #
+  # ```
+  # "string\r\n".chop   #=> "string"
+  # "string\n\r".chop   #=> "string\n"
+  # "string\n".chop     #=> "string"
+  # "string".chop       #=> "strin"
+  # "x".chop.chop       #=> ""
+  # ```
+  #
+  # See also: `#chomp`
+  def chop
+    return "" if bytesize <= 1
+
+    if bytesize >= 2 && cstr[bytesize - 1] === '\n' && cstr[bytesize - 2] === '\r'
+      return byte_slice(0, bytesize - 2)
+    end
+
+    if cstr[bytesize - 1] < 128 || single_byte_optimizable?
+      return byte_slice(0, bytesize - 1)
+    end
+
+    self[0, length - 1]
+  end
+
   def strip
     excess_right = 0
     while cstr[bytesize - 1 - excess_right].chr.whitespace?
       excess_right += 1
+    end
+
+    if excess_right == bytesize
+      return ""
     end
 
     excess_left = 0
@@ -884,7 +915,7 @@ class String
     if excess_right == 0 && excess_left == 0
       self
     else
-      byte_slice excess_left, bytesize - excess_left - excess_right
+      String.new(unsafe_byte_slice excess_left, bytesize - excess_left - excess_right)
     end
   end
 
@@ -1002,6 +1033,7 @@ class String
 
         buffer.write unsafe_byte_slice(last_byte_offset, index - last_byte_offset)
         str = match[0]
+        $~ = match
         buffer << yield str, match
 
         if str.bytesize == 0
@@ -1247,7 +1279,7 @@ class String
   end
 
   def =~(other)
-    other =~ self
+    nil
   end
 
   def +(other : self)
@@ -1287,7 +1319,9 @@ class String
   end
 
   def *(times : Int)
-    if times <= 0 || bytesize == 0
+    raise ArgumentError.new "negative argument" if times < 0
+
+    if times == 0 || bytesize == 0
       return ""
     elsif bytesize == 1
       return String.new(times) do |buffer|
@@ -1779,6 +1813,68 @@ class String
     end
   end
 
+  # Returns the successor of the string. The successor is calculated by incrementing characters starting from the rightmost
+  # alphanumeric (or the rightmost character if there are no alphanumerics) in the string. Incrementing a digit always
+  # results in another digit, and incrementing a letter results in another letter of the same case.
+  #
+  # If the increment generates a “carry”, the character to the left of it is incremented. This process repeats until
+  # there is no carry, adding an additional character if necessary.
+  #
+  # ```
+  # "abcd".succ        #=> "abce"
+  # "THX1138".succ     #=> "THX1139"
+  # "((koala))".succ   #=> "((koalb))"
+  # "1999zzz".succ     #=> "2000aaa"
+  # "ZZZ9999".succ     #=> "AAAA0000"
+  # "***".succ         #=> "**+"
+  # ```
+  def succ
+    return self if bytesize == 0
+
+    chars = self.chars
+
+    carry = nil
+    last_alnum = 0
+    index = length - 1
+
+    while index >= 0
+      s = chars[index]
+      if s.alphanumeric?
+        carry = 0
+        if ('0' <= s && s < '9') ||
+           ('a' <= s && s < 'z') ||
+           ('A' <= s && s < 'Z')
+          chars[index] = s.succ
+          break
+        elsif s == '9'
+          chars[index] = '0'
+          carry = '1'
+        elsif s == 'z'
+          chars[index] = carry = 'a'
+        elsif s == 'Z'
+          chars[index] = carry = 'A'
+        end
+
+        last_alnum = index
+      end
+      index -= 1
+    end
+
+    if carry.nil? # there were no alphanumeric chars
+      chars[length - 1] = chars[length - 1].succ
+    end
+
+    if carry.is_a?(Char) && index < 0 # we still have a carry and already reached the beginning
+      chars.insert(last_alnum, carry)
+    end
+
+    String.build(chars.length) do |str|
+      chars.each do |char|
+        str << char
+      end
+    end
+  end
+
   def match(regex : Regex, pos = 0)
     match = regex.match self, pos
     $~ = match
@@ -1790,6 +1886,7 @@ class String
 
     while match = pattern.match_at_byte_index(self, byte_offset)
       index = match.byte_begin(0)
+      $~ = match
       yield match
       match_bytesize = match[0].bytesize
       break if match_bytesize == 0
@@ -1825,6 +1922,13 @@ class String
     matches
   end
 
+  # Yields each character in the string to the block.
+  #
+  # ```
+  # "ab☃".each_char do |char|
+  #   char #=> 'a', 'b', '☃'
+  # end
+  # ```
   def each_char
     if single_byte_optimizable?
       each_byte do |byte|
@@ -1838,10 +1942,26 @@ class String
     self
   end
 
+  # Returns an iterator over each character in the string.
+  #
+  # ```
+  # chars = "ab☃".each_char
+  # chars.next #=> 'a'
+  # chars.next #=> 'b'
+  # chars.next #=> '☃'
+  # ```
   def each_char
     CharIterator.new(CharReader.new(self))
   end
 
+  # Yields each character and its index in the string to the block.
+  #
+  # ```
+  # "ab☃".each_char_with_index do |char, index|
+  #   char  #=> 'a', 'b', '☃'
+  #   index #=>  0,   1,   2
+  # end
+  # ```
   def each_char_with_index
     i = 0
     each_char do |char|
@@ -1851,6 +1971,11 @@ class String
     self
   end
 
+  # Returns an array of all characters in the string.
+  #
+  # ```
+  # "ab☃".chars #=> ['a', 'b', '☃']
+  # ```
   def chars
     chars = Array(Char).new(@length > 0 ? @length : bytesize)
     each_char do |char|
@@ -1859,6 +1984,52 @@ class String
     chars
   end
 
+  # Yields each codepoint to the block. See Char#ord
+  #
+  # ```
+  # "ab☃".each_codepoint do |codepoint|
+  #   codepoint #=> 97, 98, 9731
+  # end
+  # ```
+  def each_codepoint
+    each_char do |char|
+      yield char.ord
+    end
+  end
+
+  # Returns an iterator for each codepoint. See Char#ord
+  #
+  # ```
+  # codepoints = "ab☃".each_codepoint
+  # codepoints.next #=> 97
+  # codepoints.next #=> 98
+  # codepoints.next #=> 9731
+  # ```
+  def each_codepoint
+    each_char.map &.ord
+  end
+
+
+  # Returns an array of the codepoints that make the string. See Char#ord
+  #
+  # ```
+  # "ab☃".codepoints #=> [97, 98, 9731]
+  # ```
+  def codepoints
+    codepoints = Array(Int32).new(@length > 0 ? @length : bytesize)
+    each_codepoint do |codepoint|
+      codepoints << codepoint
+    end
+    codepoints
+  end
+
+  # Yields each byte in the string to the block.
+  #
+  # ```
+  # "ab☃".each_byte do |byte|
+  #   byte #=> 97, 98, 226, 152, 131
+  # end
+  # ```
   def each_byte
     cstr.to_slice(bytesize).each do |byte|
       yield byte
@@ -1866,19 +2037,45 @@ class String
     self
   end
 
+  # Returns an iterator over each byte in the string.
+  #
+  # ```
+  # bytes = "ab☃".each_byte
+  # bytes.next #=> 97
+  # bytes.next #=> 98
+  # bytes.next #=> 226
+  # bytes.next #=> 156
+  # bytes.next #=> 131
+  # ```
   def each_byte
     to_slice.each
   end
 
+  # Returns this string's bytes as an `Array(UInt8)`.
+  #
+  # ```
+  # "hello".bytes          #=> [104, 101, 108, 108, 111]
+  # "你好".bytes           #=> [228, 189, 160, 229, 165, 189]
+  # ```
+  def bytes
+    Array.new(bytesize) { |i| cstr[i] }
+  end
+
   def inspect(io)
     dump_or_inspect(io) do |char|
-      if char.control?
-        io << "\\u{"
-        char.ord.to_s(16, io)
-        io << "}"
-      else
-        io << char
-      end
+      inspect_char(char, io)
+    end
+  end
+
+  def inspect_unquoted
+    String.build do |io|
+      inspect_unquoted(io)
+    end
+  end
+
+  def inspect_unquoted(io)
+    dump_or_inspect_unquoted(io) do |char|
+      inspect_char(char, io)
     end
   end
 
@@ -1890,18 +2087,31 @@ class String
 
   def dump(io)
     dump_or_inspect(io) do |char|
-      if char.control? || char.ord >= 0x80
-        io << "\\u{"
-        char.ord.to_s(16, io)
-        io << "}"
-      else
-        io << char
-      end
+      dump_char(char, io)
+    end
+  end
+
+  def dump_unquoted
+    String.build do |io|
+      dump_unquoted(io)
+    end
+  end
+
+  def dump_unquoted(io)
+    dump_or_inspect_unquoted(io) do |char|
+      dump_char(char, io)
     end
   end
 
   private def dump_or_inspect(io)
     io << "\""
+    dump_or_inspect_unquoted(io) do |char|
+      yield char
+    end
+    io << "\""
+  end
+
+  private def dump_or_inspect_unquoted(io)
     reader = CharReader.new(self)
     while reader.has_next?
       current_char = reader.current_char
@@ -1930,7 +2140,26 @@ class String
       end
       reader.next_char
     end
-    io << "\""
+  end
+
+  private def inspect_char(char, io)
+    if char.control?
+      io << "\\u{"
+      char.ord.to_s(16, io)
+      io << "}"
+    else
+      io << char
+    end
+  end
+
+  private def dump_char(char, io)
+    if char.control? || char.ord >= 0x80
+      io << "\\u{"
+      char.ord.to_s(16, io)
+      io << "}"
+    else
+      io << char
+    end
   end
 
   def starts_with?(str : String)
@@ -1990,16 +2219,6 @@ class String
     h
   end
 
-  # Returns this string's bytes as an `Array(UInt8)`.
-  #
-  # ```
-  # "hello".bytes          #=> [104, 101, 108, 108, 111]
-  # "你好".bytes           #=> [228, 189, 160, 229, 165, 189]
-  # ```
-  def bytes
-    Array.new(bytesize) { |i| cstr[i] }
-  end
-
   # Returns the number of unicode codepoints in this string.
   #
   # ```
@@ -2016,7 +2235,6 @@ class String
 
     while i < bytesize
       c = cstr[i]
-      break if c == 0
 
       if c < 0x80
         i += 1

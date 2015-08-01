@@ -201,6 +201,32 @@ describe "MacroExpander" do
     it "executes == on symbols (false) (#240)" do
       assert_macro "", "{{:foo == :bar}}", [] of ASTNode, "false"
     end
+
+    describe "class_name" do
+      it "executes class_name" do
+        assert_macro "", "{{:foo.class_name}}", [] of ASTNode, "\"SymbolLiteral\""
+      end
+
+      it "executes class_name" do
+        assert_macro "x", "{{x.class_name}}", [MacroId.new("hello")] of ASTNode, "\"MacroId\""
+      end
+
+      it "executes class_name" do
+        assert_macro "x", "{{x.class_name}}", [StringLiteral.new("hello")] of ASTNode, "\"StringLiteral\""
+      end
+
+      it "executes class_name" do
+        assert_macro "x", "{{x.class_name}}", [SymbolLiteral.new("hello")] of ASTNode, "\"SymbolLiteral\""
+      end
+
+      it "executes class_name" do
+        assert_macro "x", "{{x.class_name}}", [NumberLiteral.new(1)] of ASTNode, "\"NumberLiteral\""
+      end
+
+      it "executes class_name" do
+        assert_macro "x", "{{x.class_name}}", [ArrayLiteral.new([Path.new("Foo"), Path.new("Bar")] of ASTNode)] of ASTNode, "\"ArrayLiteral\""
+      end
+    end
   end
 
   describe "number methods" do
@@ -413,6 +439,14 @@ describe "MacroExpander" do
     it "executes gsub" do
       assert_macro "", %({{"hello".gsub(/e|o/, "a")}}), [] of ASTNode, %("halla")
     end
+
+    it "executes camelcase" do
+      assert_macro "", %({{"foo_bar".camelcase}}), [] of ASTNode, %("FooBar")
+    end
+
+    it "executes underscore" do
+      assert_macro "", %({{"FooBar".underscore}}), [] of ASTNode, %("foo_bar")
+    end
   end
 
   describe "macro id methods" do
@@ -432,6 +466,26 @@ describe "MacroExpander" do
       assert_macro "x", %({{x.starts_with?("hel")}}), [SymbolLiteral.new("hello")] of ASTNode, %(true)
       assert_macro "x", %({{x.chomp}}), [SymbolLiteral.new("hello\n")] of ASTNode, %(:hello)
       assert_macro "x", %({{x.upcase}}), [SymbolLiteral.new("hello")] of ASTNode, %(:HELLO)
+    end
+  end
+
+  describe "and methods" do
+    it "executes left" do
+      assert_macro "x", %({{x.left}}), [And.new(NumberLiteral.new(1), NumberLiteral.new(2))] of ASTNode, %(1)
+    end
+
+    it "executes right" do
+      assert_macro "x", %({{x.right}}), [And.new(NumberLiteral.new(1), NumberLiteral.new(2))] of ASTNode, %(2)
+    end
+  end
+
+  describe "or methods" do
+    it "executes left" do
+      assert_macro "x", %({{x.left}}), [Or.new(NumberLiteral.new(1), NumberLiteral.new(2))] of ASTNode, %(1)
+    end
+
+    it "executes right" do
+      assert_macro "x", %({{x.right}}), [Or.new(NumberLiteral.new(1), NumberLiteral.new(2))] of ASTNode, %(2)
     end
   end
 
@@ -557,6 +611,14 @@ describe "MacroExpander" do
     it "executes uniq" do
       assert_macro "", %({{[1, 1, 1, 2, 3, 1, 2, 3, 4].uniq}}), [] of ASTNode, %([1, 2, 3, 4])
     end
+
+    it "executes unshift" do
+      assert_macro "", %({% x = [1]; x.unshift(2); %}{{x}}), [] of ASTNode, %([2, 1])
+    end
+
+    it "executes push" do
+      assert_macro "", %({% x = [1]; x.push(2); x << 3 %}{{x}}), [] of ASTNode, %([1, 2, 3])
+    end
   end
 
   describe "hash methods" do
@@ -644,6 +706,12 @@ describe "MacroExpander" do
     end
   end
 
+  describe "expressions methods" do
+    it "executes expressions" do
+      assert_macro "x", %({{x.body.expressions[0]}}), [Block.new(body: Expressions.new([Call.new(nil, "some_call"), Call.new(nil, "some_other_call")] of ASTNode))] of ASTNode, "some_call"
+    end
+  end
+
   it "executes assign" do
     assert_macro "", %({{a = 1}}{{a}}), [] of ASTNode, "11"
   end
@@ -714,6 +782,11 @@ describe "MacroExpander" do
     it "executes receiver" do
       assert_macro "x", %({{x.receiver}}), [Def.new("some_def", receiver: Var.new("self"))] of ASTNode, "self"
     end
+
+    it "executes visibility" do
+      assert_macro "x", %({{x.visibility}}), [Def.new("some_def")] of ASTNode, ":public"
+      assert_macro "x", %({{x.visibility}}), [Def.new("some_def").tap { |d| d.visibility = :private }] of ASTNode, ":private"
+    end
   end
 
   describe "call methods" do
@@ -757,6 +830,16 @@ describe "MacroExpander" do
 
     it "executes restriction" do
       assert_macro "x", %({{x.restriction}}), [Arg.new("some_arg", restriction: Path.new("T"))] of ASTNode, "T"
+    end
+  end
+
+  describe "cast methods" do
+    it "executes obj" do
+      assert_macro "x", %({{x.obj}}), [Cast.new(Call.new(nil, "x"), Path.new(["Int32"]))] of ASTNode, "x"
+    end
+
+    it "executes to" do
+      assert_macro "x", %({{x.to}}), [Cast.new(Call.new(nil, "x"), Path.new(["Int32"]))] of ASTNode, "Int32"
     end
   end
 

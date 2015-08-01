@@ -90,6 +90,27 @@ describe "Char" do
     'Z'.to_i(16, or_else: -1).should eq(-1)
   end
 
+  it "does to_i with base 36" do
+    letters = ('0'..'9').each.chain(('a'..'z').each).chain(('A'..'Z').each)
+    nums = (0..9).each.chain((10..35).each).chain((10..35).each)
+    letters.zip(nums).each do |tuple|
+      letter, num = tuple
+      letter.to_i(36).should eq(num)
+    end
+  end
+
+  it "to_i rejects unsupported base (1)" do
+    expect_raises ArgumentError, "invalid base 1" do
+      '0'.to_i(1)
+    end
+  end
+
+  it "to_i rejects unsupported base (37)" do
+    expect_raises ArgumentError, "invalid base 37" do
+      '0'.to_i(37)
+    end
+  end
+
   it "does ord for multibyte char" do
     '日'.ord.should eq(26085)
   end
@@ -165,5 +186,15 @@ describe "Char" do
 
   it "does bytes" do
     '\u{FF}'.bytes.should eq([195, 191])
+  end
+
+  it "#===(:Int)" do
+    ('c'.ord).should eq(99)
+    ('c' === 99_u8).should be_true
+    ('c' === 99).should be_true
+    ('z' === 99).should be_false
+
+    ('酒'.ord).should eq(37202)
+    ('酒' === 37202).should be_true
   end
 end

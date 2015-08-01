@@ -612,4 +612,47 @@ describe "Code gen: class" do
       ptr.value.foo
       )).to_string.should eq("D")
   end
+
+  it "works with array in variable initializer in non-generic type (#855)" do
+    run(%(
+      require "prelude"
+
+      class Foo
+        @ary = [1, 2, 3]
+
+        def sum
+          @ary.sum
+        end
+      end
+
+      Foo.new.sum
+      )).to_i.should eq(6)
+  end
+
+  it "works with array in variable initializer in generic type (#855)" do
+    run(%(
+      require "prelude"
+
+      class Foo(T)
+        @ary = [1, 2, 3]
+
+        def sum
+          @ary.sum
+        end
+      end
+
+      Foo(Int32).new.sum
+      )).to_i.should eq(6)
+  end
+
+  it "doesn't crash on instance variable assigned a proc, and never instantiated (#923)" do
+    build(%(
+      class Klass
+        def f(arg)
+        end
+
+        @a = ->f(String)
+      end
+      ))
+  end
 end

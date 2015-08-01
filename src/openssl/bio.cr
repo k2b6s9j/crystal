@@ -14,6 +14,7 @@ struct OpenSSL::BIO
 
     crystal_bio.bread = -> (bio : LibCrypto::Bio*, buffer : UInt8*, len : Int32) do
       io = Box(IO).unbox(bio.value.ptr)
+      io.flush
       io.read(Slice.new(buffer, len)).to_i
     end
 
@@ -22,7 +23,8 @@ struct OpenSSL::BIO
 
       case cmd
       when LibCrypto::CTRL_FLUSH
-        io.flush if io.responds_to?(:flush); 1
+        io.flush
+        1
       when LibCrypto::CTRL_PUSH, LibCrypto::CTRL_POP
         0
       else

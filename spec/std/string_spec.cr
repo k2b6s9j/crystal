@@ -63,13 +63,13 @@ describe "String" do
     end
 
     it "raises index out of bound on index out of range with range" do
-      expect_raises(IndexOutOfBounds) do
+      expect_raises(IndexError) do
         "foo"[4 .. 1]
       end
     end
 
     it "raises index out of bound on index out of range with range and utf-8" do
-      expect_raises(IndexOutOfBounds) do
+      expect_raises(IndexError) do
         "há日本語"[6 .. 1]
       end
     end
@@ -87,13 +87,13 @@ describe "String" do
     end
 
     it "raises if index out of bounds" do
-      expect_raises(IndexOutOfBounds) do
+      expect_raises(IndexError) do
         "foo"[4, 1]
       end
     end
 
     it "raises if index out of bounds with utf-8" do
-      expect_raises(IndexOutOfBounds) do
+      expect_raises(IndexError) do
         "こんいちは"[6, 1]
       end
     end
@@ -158,7 +158,7 @@ describe "String" do
     end
 
     it "gets byte_slice with start out of bounds" do
-      expect_raises(IndexOutOfBounds) do
+      expect_raises(IndexError) do
         "hello".byte_slice(10, 3)
       end
     end
@@ -304,8 +304,8 @@ describe "String" do
     assert { "1234123412341234".to_i64.should eq(1234123412341234_i64) }
     assert { "9223372036854775808".to_u64.should eq(9223372036854775808_u64) }
 
-    assert { expect_raises { "12ab".to_i(1) } }
-    assert { expect_raises { "12ab".to_i(37) } }
+    assert { expect_raises(ArgumentError, "invalid base 1") { "12ab".to_i(1) } }
+    assert { expect_raises(ArgumentError, "invalid base 37") { "12ab".to_i(37) } }
 
     assert { expect_raises { "1Y2P0IJ32E8E7".to_i(36) } }
     assert { "1Y2P0IJ32E8E7".to_i64(36).should eq(9223372036854775807) }
@@ -360,6 +360,12 @@ describe "String" do
     (str * 10).should eq("ffffffffff")
   end
 
+  it "multiplies with negative size" do
+    expect_raises(ArgumentError, "negative argument") do
+      "f" * -1
+    end
+  end
+
   describe "downcase" do
     assert { "HELLO!".downcase.should eq("hello!") }
     assert { "HELLO MAN!".downcase.should eq("hello man!") }
@@ -401,6 +407,17 @@ describe "String" do
     assert { "hello\r\n\r\r\n".chomp("").should eq("hello\r\n\r") }
   end
 
+  describe "chop" do
+    assert { "foo".chop.should eq("fo") }
+    assert { "foo\n".chop.should eq("foo") }
+    assert { "foo\r".chop.should eq("foo") }
+    assert { "foo\r\n".chop.should eq("foo") }
+    assert { "\r\n".chop.should eq("") }
+    assert { "かたな".chop.should eq("かた") }
+    assert { "かたな\n".chop.should eq("かたな") }
+    assert { "かたな\r\n".chop.should eq("かたな") }
+  end
+
   describe "strip" do
     assert { "  hello  \n\t\f\v\r".strip.should eq("hello") }
     assert { "hello".strip.should eq("hello") }
@@ -408,6 +425,8 @@ describe "String" do
     assert { "  \n\t かたな \n\f\v".strip.should eq("かたな") }
     assert { "  \n\t かたな".strip.should eq("かたな") }
     assert { "かたな".strip.should eq("かたな") }
+    assert { "\n".strip.should eq("") }
+    assert { "\n\t  ".strip.should eq("") }
   end
 
   describe "rstrip" do
@@ -596,6 +615,14 @@ describe "String" do
       $1.should eq("oo")
       $2.should eq("r")
     end
+
+    it "returns nil with string" do
+      ("foo" =~ "foo").should be_nil
+    end
+
+    it "returns nil with regex and regex" do
+      (/foo/ =~ /foo/).should be_nil
+    end
   end
 
   describe "delete" do
@@ -736,6 +763,17 @@ describe "String" do
     str.gsub(/(he|l|o)/, {"he": "ha", "l": "la"}).should eq("halala")
   end
 
+  it "gsubs using $~" do
+    "foo".gsub(/(o)/) { "x#{$1}x" }.should eq("fxoxxox")
+  end
+
+  it "scans using $~" do
+    str = String.build do |str|
+      "fooxooo".scan(/(o+)/) { str << $1 }
+    end
+    str.should eq("ooooo")
+  end
+
   it "dumps" do
     "a".dump.should eq("\"a\"")
     "\\".dump.should eq("\"\\\\\"")
@@ -752,6 +790,13 @@ describe "String" do
     "\u{81}".dump.should eq("\"\\u{81}\"")
   end
 
+  it "dumps unquoted" do
+    "a".dump_unquoted.should eq("a")
+    "\\".dump_unquoted.should eq("\\\\")
+    "á".dump_unquoted.should eq("\\u{e1}")
+    "\u{81}".dump_unquoted.should eq("\\u{81}")
+  end
+
   it "inspects" do
     "a".inspect.should eq("\"a\"")
     "\\".inspect.should eq("\"\\\\\"")
@@ -766,6 +811,13 @@ describe "String" do
     "\#{".inspect.should eq("\"\\\#{\"")
     "á".inspect.should eq("\"á\"")
     "\u{81}".inspect.should eq("\"\\u{81}\"")
+  end
+
+  it "inspects unquoted" do
+    "a".inspect_unquoted.should eq("a")
+    "\\".inspect_unquoted.should eq("\\\\")
+    "á".inspect_unquoted.should eq("á")
+    "\u{81}".inspect_unquoted.should eq("\\u{81}")
   end
 
   it "does *" do
@@ -919,7 +971,7 @@ describe "String" do
 
   it "does byte_at" do
     "hello".byte_at(1).should eq('e'.ord)
-    expect_raises(IndexOutOfBounds) { "hello".byte_at(5) }
+    expect_raises(IndexError) { "hello".byte_at(5) }
   end
 
   it "does byte_at?" do
@@ -1123,6 +1175,56 @@ describe "String" do
     assert { "12".rjust(7, 'あ').should eq("あああああ12") }
   end
 
+  describe "succ" do
+    it "returns an empty string for empty strings" do
+      "".succ.should eq("")
+    end
+
+    it "returns the successor by increasing the rightmost alphanumeric (digit => digit, letter => letter with same case)" do
+      "abcd".succ.should eq("abce")
+      "THX1138".succ.should eq("THX1139")
+
+      "<<koala>>".succ.should eq("<<koalb>>")
+      "==A??".succ.should eq("==B??")
+    end
+
+    it "increases non-alphanumerics (via ascii rules) if there are no alphanumerics" do
+      "***".succ.should eq("**+")
+      "**`".succ.should eq("**a")
+    end
+
+    it "increases the next best alphanumeric (jumping over non-alphanumerics) if there is a carry" do
+      "dz".succ.should eq("ea")
+      "HZ".succ.should eq("IA")
+      "49".succ.should eq("50")
+
+      "izz".succ.should eq("jaa")
+      "IZZ".succ.should eq("JAA")
+      "699".succ.should eq("700")
+
+      "6Z99z99Z".succ.should eq("7A00a00A")
+
+      "1999zzz".succ.should eq("2000aaa")
+      "NZ/[]ZZZ9999".succ.should eq("OA/[]AAA0000")
+    end
+
+    it "adds an additional character (just left to the last increased one) if there is a carry and no character left to increase" do
+      "z".succ.should eq("aa")
+      "Z".succ.should eq("AA")
+      "9".succ.should eq("10")
+
+      "zz".succ.should eq("aaa")
+      "ZZ".succ.should eq("AAA")
+      "99".succ.should eq("100")
+
+      "9Z99z99Z".succ.should eq("10A00a00A")
+
+      "ZZZ9999".succ.should eq("AAAA0000")
+      "/[]ZZZ9999".succ.should eq("/[]AAAA0000")
+      "Z/[]ZZZ9999".succ.should eq("AA/[]AAA0000")
+    end
+  end
+
   it "uses sprintf from top-level" do
     sprintf("Hello %d world", 123).should eq("Hello 123 world")
     sprintf("Hello %d world", [123]).should eq("Hello 123 world")
@@ -1180,5 +1282,28 @@ describe "String" do
 
     iter.rewind
     iter.next.should eq("foo\n")
+  end
+
+  it "has yields to each_codepoint" do
+    codepoints = [] of Int32
+    "ab☃".each_codepoint do |codepoint|
+      codepoints << codepoint
+    end
+    codepoints.should eq [97, 98, 9731]
+  end
+
+  it "has the each_codepoint iterator" do
+    iter = "ab☃".each_codepoint
+    iter.next.should eq 97
+    iter.next.should eq 98
+    iter.next.should eq 9731
+  end
+
+  it "has codepoints" do
+    "ab☃".codepoints.should eq [97, 98, 9731]
+  end
+
+  it "gets length of \0 string" do
+    "\0\0".length.should eq(2)
   end
 end

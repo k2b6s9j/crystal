@@ -7,12 +7,13 @@ lib LibC
 end
 
 ifdef darwin || linux
-  STDIN = BufferedIO.new(FileDescriptorIO.new(0, blocking: LibC.isatty(0) == 0, edge_triggerable: ifdef darwin; false; else; true; end))
-  STDOUT = AutoflushBufferedIO.new(FileDescriptorIO.new(1, blocking: LibC.isatty(1) == 0, edge_triggerable: ifdef darwin; false; else; true; end))
+  STDIN = FileDescriptorIO.new(0, blocking: LibC.isatty(0) == 0, edge_triggerable: ifdef darwin; false; else; true; end)
+  STDOUT = (FileDescriptorIO.new(1, blocking: LibC.isatty(1) == 0, edge_triggerable: ifdef darwin; false; else; true; end)).tap { |f| f.flush_on_newline = true }
   STDERR = FileDescriptorIO.new(2, blocking: LibC.isatty(2) == 0, edge_triggerable: ifdef darwin; false; else; true; end)
 
   PROGRAM_NAME = String.new(ARGV_UNSAFE.value)
   ARGV = (ARGV_UNSAFE + 1).to_slice(ARGC_UNSAFE - 1).map { |c_str| String.new(c_str) }
+  ARGF = IO::ARGF.new(ARGV, STDIN)
  elsif windows
   class ANSIEscFileDescriptorIO < FileDescriptorIO
     def write(slice : Slice(UInt8), count)
@@ -203,6 +204,7 @@ end
 def exit(status = 0)
   AtExitHandlers.run
   STDOUT.flush
+  STDERR.flush
   Process.exit(status)
 end
 
@@ -212,3 +214,11 @@ def abort(message, status = 1)
 end
 
 Signal::PIPE.ignore
+
+# Background loop to cleanup unused fiber stacks
+spawn do
+  loop do
+    sleep 5
+    Fiber.stack_pool_collect
+  end
+end

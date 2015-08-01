@@ -19,7 +19,7 @@ class Fiber
   protected property :prev_fiber
 
   def initialize(&@proc)
-    @stack = @@stack_pool.pop? || LibC.malloc(STACK_SIZE.to_u32)
+    @stack = Fiber.allocate_stack
     @stack_top = @stack_bottom = @stack + STACK_SIZE
     @cr = LibPcl.co_create(->(fiber) { (fiber as Fiber).run }, self as Void*, @stack, STACK_SIZE)
     LibPcl.co_set_data(@cr, self as Void*)
@@ -44,6 +44,22 @@ class Fiber
     @@first_fiber = @@last_fiber = self
   end
 
+  protected def self.allocate_stack
+    @@stack_pool.pop? || LibC.mmap(nil, LibC::SizeT.cast(Fiber::STACK_SIZE),
+      LibC::PROT_READ | LibC::PROT_WRITE,
+      LibC::MAP_PRIVATE | LibC::MAP_ANON,
+      -1, 0)
+  end
+
+  def self.stack_pool_collect
+    return if @@stack_pool.size == 0
+    free_count = @@stack_pool.size > 1 ? @@stack_pool.size / 2 : 1
+    free_count.times do
+      stack = @@stack_pool.pop
+      LibC.munmap(stack, LibC::SizeT.cast(Fiber::STACK_SIZE))
+    end
+  end
+
   def run
     @proc.call
     @@stack_pool << @stack
@@ -62,11 +78,7 @@ class Fiber
       @@last_fiber = @prev_fiber
     end
 
-    @@rescheduler.try &.call
-  end
-
-  def self.rescheduler=(rescheduler)
-    @@rescheduler = rescheduler
+    Scheduler.reschedule
   end
 
   @[NoInline]
@@ -85,6 +97,16 @@ class Fiber
     end
   end
 
+  protected def push_gc_roots
+    # Push the used section of the stack
+    LibGC.push_all_eager @stack_top, @stack_bottom
+
+    # PCL stores context (setjmp or ucontext) in the first bytes of the given stack
+    ptr = @cr as Void*
+    # HACK: the size of the context varies on each platform
+    LibGC.push_all_eager ptr, ptr + 1024
+  end
+
   @@prev_push_other_roots = LibGC.get_push_other_roots
 
   # This will push all fibers stacks whenever the GC wants to collect some memory
@@ -93,7 +115,7 @@ class Fiber
 
     fiber = @@first_fiber
     while fiber
-      LibGC.push_all fiber.stack_top, fiber.stack_bottom
+      fiber.push_gc_roots
       fiber = fiber.next_fiber
     end
   end

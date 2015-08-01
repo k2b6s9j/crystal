@@ -21,18 +21,18 @@ struct XML::Attributes
     index += length if index < 0
 
     unless 0 <= index < length
-      raise IndexOutOfBounds.new
+      raise IndexError.new
     end
 
     each_with_index do |node, i|
       return node if i == index
     end
 
-    raise IndexOutOfBounds.new
+    raise IndexError.new
   end
 
   def [](name : String)
-    self[name]? || raise MissingKey.new("Missing attribute: #{name}")
+    self[name]? || raise KeyError.new("Missing attribute: #{name}")
   end
 
   def []?(name : String)

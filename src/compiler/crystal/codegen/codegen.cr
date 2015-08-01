@@ -3,7 +3,7 @@ require "../syntax/parser"
 require "../syntax/visitor"
 require "../semantic/type_inference"
 require "../program"
-require "./*"
+require "./llvm_builder_helper"
 
 LLVM.init_x86
 
@@ -27,12 +27,18 @@ module Crystal
     def evaluate(node)
       llvm_mod = build(node, single_module: true)[""]
       main = llvm_mod.functions[MAIN_NAME]
-      wrapper = llvm_mod.functions.add("__evaluate_wrapper", [] of LLVM::Type, main.return_type) do |func|
+
+      main_return_type = main.return_type
+
+      # It seems the JIT doesn't like it if we return an empty type (struct {})
+      main_return_type = LLVM::Void if node.type.nil_type?
+
+      wrapper = llvm_mod.functions.add("__evaluate_wrapper", [] of LLVM::Type, main_return_type) do |func|
         func.basic_blocks.append "entry"  do |builder|
           argc = LLVM.int(LLVM::Int32, 0)
           argv = LLVM::VoidPointer.pointer.null
           ret = builder.call(main, [argc, argv])
-          node.type.void? ? builder.ret : builder.ret(ret)
+          (node.type.void? || node.type.nil_type?) ? builder.ret : builder.ret(ret)
         end
       end
 
@@ -59,6 +65,7 @@ module Crystal
   class CodeGenVisitor < Visitor
     PERSONALITY_NAME = "__crystal_personality"
     GET_EXCEPTION_NAME = "__crystal_get_exception"
+    SYMBOL_TABLE_NAME = ":symbol_table"
 
     include LLVMBuilderHelper
 
@@ -94,7 +101,7 @@ module Crystal
 
     alias LLVMVars = Hash(String, LLVMVar)
 
-    record Handler, node, catch_block, vars
+    record Handler, node, context
     record StringKey, mod, string
 
     def initialize(@mod, @node, @single_module = false, @debug = false, @llvm_mod = LLVM::Module.new("main_module"), expose_crystal_main = true)
@@ -170,7 +177,7 @@ module Crystal
     end
 
     def define_symbol_table(llvm_mod)
-      llvm_mod.globals.add llvm_type(@mod.string).array(@symbol_table_values.count), "symbol_table"
+      llvm_mod.globals.add llvm_type(@mod.string).array(@symbol_table_values.count), SYMBOL_TABLE_NAME
     end
 
     class CodegenWellKnownFunctions < Visitor
@@ -261,11 +268,6 @@ module Crystal
       false
     end
 
-    def visit(node : ExpandableNode)
-      node.expanded.try &.accept self
-      false
-    end
-
     def visit(node : Nop)
       @last = llvm_nil
     end
@@ -308,7 +310,7 @@ module Crystal
     end
 
     def visit(node : StringLiteral)
-      @last = build_string_constant(node.value)
+      @last = build_string_constant(node.value, node.value)
     end
 
     def visit(node : SymbolLiteral)
@@ -333,12 +335,19 @@ module Crystal
                 context.vars[node_exp.name].pointer
               when InstanceVar
                 instance_var_ptr (context.type.remove_typedef as InstanceVarContainer), node_exp.name, llvm_self_ptr
+              when ClassVar
+                get_global node_exp, class_var_global_name(node_exp), node_exp.type
+              when Global
+                get_global node_exp, node_exp.name, node_exp.type
               when Path
                 accept(node_exp)
                 global_name = node_exp.target_const.not_nil!.llvm_name
                 @llvm_mod.globals[global_name]
+              when ReadInstanceVar
+                node_exp.obj.accept self
+                instance_var_ptr (node_exp.obj.type), node_exp.name, @last
               else
-                raise "Bug: pointerof(#{node})"
+                raise "Bug: #{node}"
               end
       false
     end
@@ -409,16 +418,11 @@ module Crystal
     def visit(node : Return)
       node_type = accept_control_expression(node)
 
-      if handler = @exception_handlers.try &.last?
-        if node_ensure = handler.node.ensure
-          old_last = @last
-          with_cloned_context do
-            context.vars = handler.vars
-            accept node_ensure
-          end
-          @last = old_last
-        end
-      end
+      old_last = @last
+
+      execute_ensures_until(node.target as Def)
+
+      @last = old_last
 
       if return_phi = context.return_phi
         return_phi.add @last, node_type
@@ -558,6 +562,8 @@ module Crystal
     end
 
     def visit(node : While)
+      node.ensure_exception_handler = current_ensure_exception_handler
+
       with_cloned_context do
         while_block, body_block, exit_block = new_blocks "while", "body", "exit"
 
@@ -607,8 +613,13 @@ module Crystal
       node_type = accept_control_expression(node)
 
       if break_phi = context.break_phi
+        old_last = @last
+        execute_ensures_until(node.target as Block)
+        @last = old_last
+
         break_phi.add @last, node_type
       elsif while_exit_block = context.while_exit_block
+        execute_ensures_until(node.target as While)
         br while_exit_block
       else
         node.raise "Bug: unknown exit for break"
@@ -621,8 +632,13 @@ module Crystal
       node_type = accept_control_expression(node)
 
       if next_phi = context.next_phi
+        old_last = @last
+        execute_ensures_until(node.target as Block)
+        @last = old_last
+
         next_phi.add @last, node_type
       elsif while_block = context.while_block
+        execute_ensures_until(node.target as While)
         br while_block
       else
         node.raise "Bug: unknown exit for next"
@@ -643,19 +659,51 @@ module Crystal
       end
     end
 
+    def execute_ensures_until(node)
+      stop_exception_handler = node.ensure_exception_handler.try &.node
+
+      @ensure_exception_handlers.try &.reverse_each do |exception_handler|
+        break if exception_handler.node.same?(stop_exception_handler)
+
+        target_ensure = exception_handler.node.ensure
+        next unless target_ensure
+
+        with_context(exception_handler.context) do
+          target_ensure.accept self
+        end
+      end
+    end
+
+    def current_ensure_exception_handler
+      @ensure_exception_handlers.try &.last?
+    end
+
     def visit(node : Assign)
       target, value = node.target, node.value
 
-      # Initialize constants if they are used
-      if target.is_a?(Path)
+      case target
+      when Underscore
+        request_value(false) { accept value }
+        return false
+      when Path
+        # Initialize constants if they are used
         const = target.target_const.not_nil!
         initialize_const const
         @last = llvm_nil
         return false
       end
 
+      target_type = target.type?
+
       # This means it's an instance variable initialize of a generic type
-      return unless target.type?
+      unless target_type
+        return false
+      end
+
+      # This is the case of an instance variable initializer
+      if target.is_a?(InstanceVar) && !context.type.is_a?(InstanceVarContainer)
+        return false
+      end
 
       request_value do
         accept value
@@ -663,21 +711,13 @@ module Crystal
 
       return if value.no_returns?
 
-      target_type = target.type
-
       ptr = case target
             when InstanceVar
-              context_type = context.type
-              if context_type.is_a?(InstanceVarContainer)
-                instance_var_ptr context_type, target.name, llvm_self_ptr
-              else
-                # This is the case of an instance variable initializer
-                return false
-              end
+              instance_var_ptr (context.type as InstanceVarContainer), target.name, llvm_self_ptr
             when Global
-              get_global target, target.name, target.type
+              get_global target, target.name, target_type
             when ClassVar
-              get_global target, class_var_global_name(target), target.type
+              get_global target, class_var_global_name(target), target_type
             when Var
               # Can't assign void
               return if target.type.void?
@@ -841,14 +881,14 @@ module Crystal
 
     def type_cast_exception_call(to_type)
       call = Call.global("raise", StringLiteral.new("cast to #{to_type} failed"))
-      @mod.infer_type call
+      @mod.infer_type_intermediate call
       call
     end
 
     def cant_pass_closure_to_c_exception_call
       @cant_pass_closure_to_c_exception_call ||= begin
         call = Call.global("raise", StringLiteral.new("passing a closure to C is not allowed"))
-        @mod.infer_type call
+        @mod.infer_type_intermediate call
         call
       end
     end
@@ -978,9 +1018,8 @@ module Crystal
     end
 
     def visit(node : Yield)
-      if expanded = node.expanded
-        expanded.accept self
-        return
+      if node.expanded
+        raise "Bug: #{node} at #{node.location} should have been expanded"
       end
 
       block_context = context.block_context.not_nil!
@@ -1029,6 +1068,8 @@ module Crystal
           context.closure_parent_context = block_context.closure_parent_context
 
           @needs_value = true
+          block.ensure_exception_handler = current_ensure_exception_handler
+
           accept block.body
         end
 
@@ -1043,14 +1084,22 @@ module Crystal
     end
 
     def visit(node : ExceptionHandler)
-      catch_block = new_block "catch"
+      rescue_block = new_block "rescue"
+
+      node_rescues = node.rescues
       node_ensure = node.ensure
+      rescue_ensure_block = nil
 
       Phi.open(self, node, @needs_value) do |phi|
-        exception_handlers = (@exception_handlers ||= [] of Handler)
-        exception_handlers << Handler.new(node, catch_block, context.vars)
+        exception_handler = Handler.new(node, context)
+
+        ensure_exception_handlers = (@ensure_exception_handlers ||= [] of Handler)
+        ensure_exception_handlers.push exception_handler
+
+        old_rescue_block = @rescue_block
+        @rescue_block = rescue_block
         accept node.body
-        exception_handlers.pop
+        @rescue_block = old_rescue_block
 
         if node_else = node.else
           accept node_else
@@ -1059,13 +1108,17 @@ module Crystal
           phi.add @last, node.body.type?
         end
 
-        position_at_end catch_block
+        position_at_end rescue_block
         lp_ret_type = llvm_typer.landing_pad_type
         lp = builder.landing_pad lp_ret_type, main_fun(PERSONALITY_NAME), [] of LLVM::Value
         unwind_ex_obj = extract_value lp, 0
         ex_type_id = extract_value lp, 1
 
-        if node_rescues = node.rescues
+        if node_rescues
+          if node_ensure
+            rescue_ensure_block = new_block "rescue_ensure"
+          end
+
           node_rescues.each do |a_rescue|
             this_rescue_block, next_rescue_block = new_blocks "this_rescue", "next_rescue"
             if a_rescue_types = a_rescue.types
@@ -1096,16 +1149,20 @@ module Crystal
 
               # Make sure the rescue knows about the current ensure
               # and the previous catch block
-              previous_catch_block = exception_handlers.last?.try &.catch_block
-              exception_handlers << Handler.new(node, previous_catch_block, context.vars)
+              old_rescue_block = @rescue_block
+              @rescue_block = rescue_ensure_block || @rescue_block
+
               accept a_rescue.body
-              exception_handlers.pop
+
+              @rescue_block = old_rescue_block
             end
             phi.add @last, a_rescue.body.type?
 
             position_at_end next_rescue_block
           end
         end
+
+        ensure_exception_handlers.pop
 
         if node_ensure
           accept node_ensure
@@ -1115,11 +1172,31 @@ module Crystal
         codegen_call_or_invoke(node, nil, nil, raise_fun, [bit_cast(unwind_ex_obj, raise_fun.params.first.type)], true, @mod.no_return)
       end
 
-      if node_ensure && !@builder.end
-        old_last = @last
+      old_last = @last
+      builder_end = @builder.end
+
+      if node_ensure && !builder_end
         accept node_ensure
-        @last = old_last
       end
+
+      if node_ensure && node_rescues
+        old_block = insert_block
+        position_at_end rescue_ensure_block.not_nil!
+        lp_ret_type = llvm_typer.landing_pad_type
+        lp = builder.landing_pad lp_ret_type, main_fun(PERSONALITY_NAME), [] of LLVM::Value
+        unwind_ex_obj = extract_value lp, 0
+
+        accept node_ensure
+        raise_fun = main_fun(RAISE_NAME)
+        codegen_call_or_invoke(node, nil, nil, raise_fun, [bit_cast(unwind_ex_obj, raise_fun.params.first.type)], true, @mod.no_return)
+
+        position_at_end old_block
+
+        # Since we went to another block, we must restore the 'end' state
+        @builder.end = builder_end
+      end
+
+      @last = old_last
 
       false
     end
@@ -1385,8 +1462,10 @@ module Crystal
       old_llvm_mod = @llvm_mod
       @llvm_mod = @main_mod
 
-      old_exception_handlers = @exception_handlers
-      @exception_handlers = nil
+      old_ensure_exception_handlers = @ensure_exception_handlers
+      old_rescue_block = @rescue_block
+      @ensure_exception_handlers = nil
+      @rescue_block = nil
 
       with_cloned_context do
         context.fun = @main
@@ -1401,7 +1480,8 @@ module Crystal
       end
 
       @llvm_mod = old_llvm_mod
-      @exception_handlers = old_exception_handlers
+      @ensure_exception_handlers = old_ensure_exception_handlers
+      @rescue_block = old_rescue_block
     end
 
     def printf(format, args = [] of LLVM::Value)
@@ -1432,6 +1512,7 @@ module Crystal
 
     def run_instance_vars_initializers(real_type, type : GenericClassInstanceType, type_ptr)
       run_instance_vars_initializers(real_type, type.generic_class, type_ptr)
+      run_instance_vars_initializers_non_recursive real_type, type, type_ptr
     end
 
     def run_instance_vars_initializers(real_type, type : InheritedGenericClass, type_ptr)
@@ -1443,6 +1524,16 @@ module Crystal
         run_instance_vars_initializers(real_type, superclass, type_ptr)
       end
 
+      return if type.is_a?(GenericClassType)
+
+      run_instance_vars_initializers_non_recursive real_type, type, type_ptr
+    end
+
+    def run_instance_vars_initializers(real_type, type : Type, type_ptr)
+      # Nothing to do
+    end
+
+    def run_instance_vars_initializers_non_recursive(real_type, type, type_ptr)
       initializers = type.instance_vars_initializers
       return unless initializers
 
@@ -1470,10 +1561,6 @@ module Crystal
           assign ivar_ptr, ivar.type, value.type, @last
         end
       end
-    end
-
-    def run_instance_vars_initializers(real_type, type : Type, type_ptr)
-      # Nothing to do
     end
 
     def malloc(type)
@@ -1557,7 +1644,9 @@ module Crystal
     end
 
     def build_string_constant(str, name = "str")
+      name = "#{name[0 .. 18]}..." if name.bytesize > 18
       name = name.gsub '@', '.'
+      name = "'#{name}'"
       key = StringKey.new(@llvm_mod, str)
       @strings[key] ||= begin
         global = @llvm_mod.globals.add(@llvm_typer.llvm_string_type(str.bytesize), name)
@@ -1587,8 +1676,14 @@ module Crystal
       node.accept self
     end
 
+    def visit(node : ExpandableNode)
+      raise "Bug: #{node} at #{node.location} should have been expanded"
+    end
+
     def visit(node : ASTNode)
       true
     end
   end
 end
+
+require "./*"

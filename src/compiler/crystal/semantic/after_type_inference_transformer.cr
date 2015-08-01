@@ -5,16 +5,46 @@ require "../types"
 module Crystal
   class Program
     def after_type_inference(node)
-      transformer = AfterTypeInferenceTransformer.new(self)
-      node = node.transform(transformer)
+      node = node.transform(after_type_inference_transformer)
       puts node if ENV["AFTER"]? == "1"
       node
+    end
+
+    def finish_types
+      transformer = after_type_inference_transformer()
+      after_inference_types.each do |type|
+        finish_type type, transformer
+      end
+    end
+
+    def finish_type(type, transformer)
+      case type
+      when GenericClassInstanceType
+        finish_single_type(type, transformer)
+      when GenericClassType
+        type.generic_types.each_value do |instance|
+          finish_type instance, transformer
+        end
+      when ClassType
+        finish_single_type(type, transformer)
+      end
+    end
+
+    def finish_single_type(type, transformer)
+      type.instance_vars_initializers.try &.each do |initializer|
+        initializer.value = initializer.value.transform(transformer)
+      end
+    end
+
+    def after_type_inference_transformer
+      @after_type_inference_transformer ||= AfterTypeInferenceTransformer.new(self)
     end
   end
 
   class AfterTypeInferenceTransformer < Transformer
     def initialize(@program)
       @transformed = Set(typeof(object_id)).new
+      @def_nest_count = 0
     end
 
     def transform(node : Def)
@@ -78,13 +108,18 @@ module Crystal
 
     def transform(node : ExpandableNode)
       if expanded = node.expanded
-        node.expanded = expanded.transform(self)
+        return expanded.transform(self)
       end
       node
     end
 
     def transform(node : Assign)
       target = node.target
+
+      # This is the case of an instance variable initializer
+      if @def_nest_count == 0 && target.is_a?(InstanceVar)
+        return Nop.new
+      end
 
       if target.is_a?(Path)
         const = target.target_const.not_nil!
@@ -134,6 +169,8 @@ module Crystal
                                         which is initialized later. Initialize #{target_const} before #{const_being_initialized}"
           end
         end
+
+        target_const.value = target_const.value.transform self
       end
 
       super
@@ -167,8 +204,7 @@ module Crystal
 
     def transform(node : Call)
       if expanded = node.expanded
-        node.expanded = expanded.transform self
-        return node
+        return expanded.transform self
       end
 
       node = super
@@ -250,7 +286,11 @@ module Crystal
               node.bubbling_exception do
                 old_body = target_def.body
                 old_type = target_def.body.type?
+
+                @def_nest_count += 1
                 target_def.body = target_def.body.transform(self)
+                @def_nest_count -= 1
+
                 new_type = target_def.body.type?
 
                 # It can happen that the body of the function changed, and as
@@ -335,10 +375,6 @@ module Crystal
 
     def check_args_are_not_closure(node, message)
       node.args.each do |arg|
-        if arg.is_a?(Call) && (expanded = arg.expanded)
-          arg = expanded
-        end
-
         case arg
         when FunLiteral
           if arg.def.closure
@@ -366,7 +402,13 @@ module Crystal
       super
 
       if call = node.call?
-        node.call = call.transform(self) as Call
+        result = call.transform(self)
+
+        # If the transform didn't end up in a Call, it means the
+        # call will never be executed.
+        if result.is_a?(Call)
+          node.call = result
+        end
       end
 
       node
@@ -410,6 +452,10 @@ module Crystal
     end
 
     def transform(node : Yield)
+      if expanded = node.expanded
+        return expanded.transform(self)
+      end
+
       super
 
       # If the yield has a no-return expression, the yield never happens:
@@ -500,7 +546,7 @@ module Crystal
       super
 
       if replacement = node.syntax_replacement
-        replacement
+        replacement.transform(self)
       else
         transform_is_a_or_responds_to node, &.filter_by(node.const.type)
       end
@@ -536,6 +582,10 @@ module Crystal
       return node unless obj_type
 
       to_type = node.to.type
+
+      if to_type == @program.object
+        node.raise "useless cast"
+      end
 
       if to_type.pointer?
         if obj_type.pointer? || obj_type.reference_like?

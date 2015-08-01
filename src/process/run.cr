@@ -223,6 +223,8 @@ def Process.run(command, args = nil, output = nil : IO | Bool, input = nil : Str
       status.output = status_output.to_s
     end
 
+    $? = status
+
     status
   end
 end

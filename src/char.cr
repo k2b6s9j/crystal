@@ -3,7 +3,7 @@
 #
 # It is created by enclosing an UTF-8 character in single quotes.
 #
-# ```text
+# ```
 # 'a'
 # 'z'
 # '0'
@@ -13,7 +13,7 @@
 #
 # You can use a backslash to denote some characters:
 #
-# ```text
+# ```
 # '\'' # single quote
 # '\\' # backslash
 # '\e' # escape
@@ -371,8 +371,6 @@ struct Char
   # 'z'.to_i(16)     #=> 0
   # 'z'.to_i(16, 20) #=> 20
   # ```
-  #
-  # **Note**: the only bases supported right now are 10 and 16.
   def to_i(base, or_else = 0)
     to_i(base) { or_else }
   end
@@ -386,24 +384,18 @@ struct Char
   # 'f'.to_i(16) { 20 } #=> 15
   # 'z'.to_i(16) { 20 } #=> 20
   # ```
-  #
-  # **Note**: the only bases supported right now are 10 and 16.
   def to_i(base)
-    case base
-    when 10
-      to_i { yield }
-    when 16
-      if '0' <= self <= '9'
-        self - '0'
-      elsif 'a' <= self <= 'f'
-        10 + (self - 'a')
-      elsif 'A' <= self <= 'F'
-        10 + (self - 'A')
-      else
-        yield
+    raise ArgumentError.new "invalid base #{base}" unless 2 <= base <= 36
+
+    ord = ord()
+    if ord < 256
+      digit = String::CHAR_TO_DIGIT.to_unsafe[ord]
+      if digit == -1 || digit >= base
+        return yield
       end
+      digit
     else
-      raise "Unsupported base: #{base}"
+      return yield
     end
   end
 
@@ -503,5 +495,9 @@ struct Char
       end
       io.write chars.to_slice, i
     end
+  end
+
+  def ===(byte : Int)
+    ord === byte
   end
 end

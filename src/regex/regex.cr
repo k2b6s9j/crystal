@@ -4,7 +4,13 @@ class Regex
   @[Flags]
   enum Options
     IGNORE_CASE = 1
-    MULTILINE = 4
+    # PCRE native PCRE_MULTILINE flag is 2, and PCRE_DOTALL is 4 ;
+    # - PCRE_DOTALL changes the "." meaning,
+    # - PCRE_MULTILINE changes "^" and "$" meanings)
+    # Ruby modifies this meaning to have essentially one unique "m"
+    # flag that activates both behviours, so here we do the same by
+    # mapping MULTILINE to PCRE_MULTILINE | PCRE_DOTALL
+    MULTILINE = 6
     EXTENDED = 8
     # :nodoc:
     ANCHORED      = 16
@@ -26,11 +32,6 @@ class Regex
     @extra = LibPCRE.study(@re, 0, out studyerrptr)
     raise ArgumentError.new("#{String.new(studyerrptr)}") if @extra.nil? && studyerrptr
     LibPCRE.full_info(@re, nil, LibPCRE::INFO_CAPTURECOUNT, out @captures)
-  end
-
-  # TODO: remove this constructor after 0.7.3
-  def self.new(source, options : Int32)
-    new source, Options.new(options)
   end
 
   def name_table
@@ -70,6 +71,8 @@ class Regex
   end
 
   def match_at_byte_index(str, byte_index = 0, options = Regex::Options::None)
+    return ($~ = nil) if byte_index > str.bytesize
+
     ovector_size = (@captures + 1) * 3
     ovector = Pointer(Int32).malloc(ovector_size)
     ret = LibPCRE.exec(@re, @extra, str, str.bytesize, byte_index, (options | Options::NO_UTF8_CHECK).value, ovector, ovector_size)
@@ -86,6 +89,16 @@ class Regex
     match = match(other)
     $~ = match
     !match.nil?
+  end
+
+  def =~(other : String)
+    match = self.match(other)
+    $~ = match
+    match.try &.begin(0)
+  end
+
+  def =~(other)
+    nil
   end
 
   def to_s(io : IO)

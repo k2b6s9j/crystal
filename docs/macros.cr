@@ -77,6 +77,22 @@ module Macros
   abstract class ASTNode
     # Returns this node as a `MacroId`. Useful when you need an identifier
     # out of a `StringLiteral`, `SymbolLiteral`, `Var` or `Call`.
+    #
+    # ```
+    # macro define_method(name, content)
+    #   def {{name.id}}
+    #     {{content}}
+    #   end
+    # end
+    #
+    # define_method :foo, 1
+    # define_method "bar", 2
+    # define_method baz, 3
+    #
+    # puts foo #=> prints 1
+    # puts bar #=> prints 2
+    # puts baz #=> prints 3
+    # ```
     def id : MacroId
     end
 
@@ -91,6 +107,18 @@ module Macros
     #
     # puts test # prints "foo" (including the double quotes)
     def stringify : StringLiteral
+    end
+
+    # Returns a `StringLiteral` that contains this node's name.
+    #
+    # ```
+    # macro test
+    #   {{ "foo".class_name }}
+    # end
+    #
+    # puts test #=> prints StringLiteral
+    # ```
+    def class_name : StringLiteral
     end
 
     # Returns true if this node's textual representation is the same as
@@ -115,7 +143,7 @@ module Macros
     #     puts "Got a number literal"
     #   {% else %}
     #     puts "Didn't get a number literal"
-    #   {% else %}
+    #   {% end %}
     # end
     #
     # test 1    #=> prints "Got a number literal"
@@ -240,6 +268,10 @@ module Macros
     def +(other : StringLiteral | CharLiteral) : StringLiteral
     end
 
+    # Similar to `String#camelcase`.
+    def camelcase : StringLiteral
+    end
+
     # Similar to `String#capitalize`.
     def capitalize : StringLiteral
     end
@@ -294,6 +326,10 @@ module Macros
 
     # Similar to `String#tr`.
     def tr(from : StringLiteral, to : StringLiteral) : StringLiteral
+    end
+
+    # Similar to `String#underscore`.
+    def underscore : StringLiteral
     end
 
     # Similar to `String#upcase`.
@@ -531,6 +567,12 @@ module Macros
     end
   end
 
+  class Expressions < ASTNode
+    # Returns the expressions' expressions
+    def expressions : ArrayLiteral(ASTNode)
+    end
+  end
+
   # A method call.
   class Call < ASTNode
     # Returns this call's name as a `MacroId`.
@@ -643,7 +685,7 @@ module Macros
     end
 
     # Returns the body of this method.
-    def body : MacroId
+    def body : ASTNode
     end
 
     # Returns the arguments of this method.
@@ -653,6 +695,10 @@ module Macros
     # Returns the receiver (for example `self`) of this method definition,
     # or `Nop` if not specified.
     def receiver : ASTNode | Nop
+    end
+
+    # Returns the visibility of this def: `:public`, `:protected` or `:private`.
+    def visibility : SymbolLiteral
     end
   end
 
@@ -807,8 +853,15 @@ module Macros
   # class Metaclass < ASTNode
   # end
 
-  # class Cast < ASTNode
-  # end
+  class Cast < ASTNode
+    # Returns the object part of the cast.
+    def obj : ASTNode
+    end
+
+    # Returns the target type of the cast.
+    def to : ASTNode
+    end
+  end
 
   # class TypeOf < ASTNode
   # end
@@ -982,7 +1035,7 @@ module Macros
     def instance_vars : ArrayLiteral(MetaVar)
     end
 
-    # Returns the instance variables of this type, if any.
+    # Returns the direct superclass of this type.
     def superclass : TypeNode | NilLiteral
     end
 
@@ -1031,5 +1084,24 @@ module Macros
     # generic, an empty array is returned.
     def type_params : ArrayLiteral(TypeNode)
     end
+  end
+
+  # A binary expression like `And` and `Or`.
+  class BinaryOp < ASTNode
+    # Returns the left hand side of this node.
+    def left : ASTNode
+    end
+
+    # Returns the left hand side of this node.
+    def right : ASTNode
+    end
+  end
+
+  # An `&&` (and) expression
+  class And < BinaryOp
+  end
+
+  # An `||` (or) expression
+  class Or < BinaryOp
   end
 end

@@ -152,6 +152,8 @@ module Crystal
         node.block_arg = block_arg.transform(self)
       end
 
+      node.body = node.body.transform(self)
+
       node
     end
 
@@ -565,6 +567,17 @@ module Crystal
     end
 
     def transform(node : Underscore)
+      node
+    end
+
+    def transform(node : Asm)
+      node.output = node.output.try &.transform(self)
+      node.inputs = node.inputs.try &.each &.transform(self)
+      node
+    end
+
+    def transform(node : AsmOperand)
+      node.exp = node.exp.transform self
       node
     end
 

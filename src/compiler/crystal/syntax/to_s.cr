@@ -241,11 +241,7 @@ module Crystal
         return false
       end
 
-      if ignore_obj
-        node_obj = nil
-      else
-        node_obj = node.obj
-      end
+      node_obj = ignore_obj ? nil : node.obj
 
       need_parens =
         case node_obj
@@ -266,6 +262,7 @@ module Crystal
         else
           true
         end
+      call_args_need_parens = false
 
       @str << "::" if node.global
 
@@ -322,30 +319,33 @@ module Crystal
 
           call_args_need_parens = !node.args.empty? || node.block_arg || node.named_args
 
-          in_parenthesis(call_args_need_parens) do
-            printed_arg = false
-            node.args.each_with_index do |arg, i|
+          @str << "(" if call_args_need_parens
+
+          printed_arg = false
+          node.args.each_with_index do |arg, i|
+            @str << ", " if printed_arg
+            arg_needs_parens = arg.is_a?(Cast)
+            in_parenthesis(arg_needs_parens) { arg.accept self }
+            printed_arg = true
+          end
+          if named_args = node.named_args
+            named_args.each do |named_arg|
               @str << ", " if printed_arg
-              arg_needs_parens = arg.is_a?(Cast)
-              in_parenthesis(arg_needs_parens) { arg.accept self }
+              named_arg.accept self
               printed_arg = true
             end
-            if named_args = node.named_args
-              named_args.each do |named_arg|
-                @str << ", " if printed_arg
-                named_arg.accept self
-                printed_arg = true
-              end
-            end
-            if block_arg = node.block_arg
-              @str << ", " if printed_arg
-              @str << "&"
-              block_arg.accept self
-            end
+          end
+          if block_arg = node.block_arg
+            @str << ", " if printed_arg
+            @str << "&"
+            block_arg.accept self
           end
         end
       end
-      if block = node.block
+
+      block = node.block
+
+      if block
         # Check if this is foo &.bar
         first_block_arg = block.args.first?
         if first_block_arg && block.args.length == 1
@@ -353,17 +353,27 @@ module Crystal
           if block_body.is_a?(Call)
             block_obj = block_body.obj
             if block_obj.is_a?(Var) && block_obj.name == first_block_arg.name
-              @str << "(&."
+              if node.args.empty?
+                @str << "("
+              else
+                @str << ", "
+              end
+              @str << "&."
               visit_call block_body, ignore_obj: true
               @str << ")"
               return false
             end
           end
         end
+      end
 
+      @str << ")" if call_args_need_parens
+
+      if block
         @str << " "
         block.accept self
       end
+
       false
     end
 
@@ -456,19 +466,7 @@ module Crystal
     def visit(node : Assign)
       node.target.accept self
       @str << " = "
-
-      value = node.value
-
-      if value.is_a?(Expressions)
-        @str << keyword("begin")
-        newline
-        accept_with_indent(value)
-        append_indent
-        @str << keyword("end")
-      else
-        value.accept self
-      end
-
+      accept_with_maybe_begin_end node.value
       false
     end
 
@@ -857,7 +855,7 @@ module Crystal
       @str << keyword(keyword)
       if exp = node.exp
         @str << " "
-        exp.accept self
+        accept_with_maybe_begin_end exp
       end
       false
     end
@@ -1281,6 +1279,58 @@ module Crystal
       @str << node.name
     end
 
+    def visit(node : Asm)
+      node.text.inspect(@str)
+      @str << " :"
+      if output = node.output
+        @str << " "
+        output.accept self
+        @str << " "
+      end
+      @str << ":"
+      if inputs = node.inputs
+        @str << " "
+        inputs.each_with_index do |input, i|
+          @str << ", " if i > 0
+          input.accept self
+        end
+      end
+      if clobbers = node.clobbers
+        @str << " : "
+        clobbers.each_with_index do |clobber, i|
+          @str << ", " if i > 0
+          clobber.inspect(@str)
+        end
+      end
+      if node.volatile || node.alignstack || node.intel
+        @str << " : "
+        comma = false
+        if node.volatile
+          @str << %("volatile")
+          comma = true
+        end
+        if node.alignstack
+          @str << ", " if comma
+          @str << %("alignstack")
+          comma = true
+        end
+        if node.intel
+          @str << ", " if comma
+          @str << %("intel")
+          comma = true
+        end
+      end
+      false
+    end
+
+    def visit(node : AsmOperand)
+      node.constraint.inspect(@str)
+      @str << '('
+      node.exp.accept self
+      @str << ')'
+      false
+    end
+
     def newline
       @str << "\n"
     end
@@ -1316,6 +1366,18 @@ module Crystal
         node.accept self
       end
       newline
+    end
+
+    def accept_with_maybe_begin_end(node)
+      if node.is_a?(Expressions)
+        @str << keyword("begin")
+        newline
+        accept_with_indent(node)
+        append_indent
+        @str << keyword("end")
+      else
+        node.accept self
+      end
     end
 
     def to_s

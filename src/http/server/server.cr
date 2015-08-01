@@ -46,7 +46,6 @@ class HTTP::Server
       end
     end
 
-    puts "Ready"
     gets
   end
 
@@ -55,9 +54,9 @@ class HTTP::Server
   end
 
   private def handle_client(sock)
+    sock.sync = false
     io = sock
     io = ssl_sock = OpenSSL::SSL::Socket.new(io, :server, @ssl.not_nil!) if @ssl
-    io = BufferedIO.new(io)
 
     begin
       until @wants_close
@@ -74,7 +73,7 @@ class HTTP::Server
         response = @handler.call(request)
         response.headers["Connection"] = "keep-alive" if request.keep_alive?
         response.to_io io
-        io.flush
+        sock.flush
 
         if upgrade_handler = response.upgrade_handler
           return upgrade_handler.call(io)

@@ -1,3 +1,72 @@
+## 0.7.5 (2015-07-30)
+
+* **(breaking change)** `0` is not a prefix for octal numbers anymore. Use `0o`
+* **(breaking change)** Renamed `MissingKey` to `KeyError`
+* **(breaking change)** Renamed `IndexOutOfBounds` to `IndexError`
+* Fixed all exception-handling related bugs.
+* Allow nested and multiline ternary expressions (thanks @daviswahl)
+* Allow assigning to `_` (underscore), give error when trying to read from it
+* Macros can now also receive the following nodes: `And`, `Or`, `Case`, `RangeLiteral` and `StringInterpolation`. `And` and `Or` have `left` and `right` methods.
+* Added `-e` option to `hierarchy` command to filter types by a regex
+* Added `-v` as an alias of `--version`
+* Added `-h` as an alias of `--help`
+* Added `Array#transpose` (thanks @rhysd)
+* Added `Benchmark#ips` (thanks @will)
+* Added `Hash#merge(&block)` and `Hash#merge!(&block)` (thanks @yui-knk)
+* Added `Hash#invert` (thanks @yui-knk)
+* Added `Bool#^` (thanks @yui-knk)
+* Added `Enumerable#drop`, `Enumerable#drop_while` and `Enumerable#take_while` (thanks @PragTob)
+* Added `Enumerable#none?` (thanks @yui-knk)
+* Added `Set#subset?`, `Set#superset?` and `Set#intersects?` (thanks @yui-knk)
+* Added `Set#new(Enumerable)` (thanks @yui-knk)
+* Added `String#succ` (thanks @porras and @Exilor)
+* Added `Array#*` (thanks @porras)
+* Added `Char#===(Int)` and `Int#===(Char)` (thanks @will)
+* Added `StringLiteral#camelcase` and `StringLiteral#underscore` in macros
+* Added `Expressions#expressions` in macros
+* Added `Cast#obj` and `Cast#to` in macros
+* Added `ASTNode#class_name` in macros (thanks @yui-knk)
+* Added `Array#push`/`Array#<<` and `Array#unshift` in macros (thanks @ysbaddaden)
+* Added `Def#visibility` in macros (thanks @ysbaddaden)
+* Added `String#codepoints` and `String#each_codepoint` (thanks @jhass)
+* `Char#to_i(base)` now supports bases from 2 to 36
+# `Set#|` now correctly accepts a set of a possible different type (thanks @yui-knk)
+* Flush `STDERR` on exit (thanks @jbbarth)
+* `HTTP::Client` methods accept an optional block, which will yield an `HTTP::Response` with a non-nil `body_io` property to consume the response's IO
+* Document `URI`, `UDPSocket` (thanks @davydovanton)
+* Improved `URI` class (thanks @will)
+* Define `$~` in `String#gsub` and `String#scan`
+* Define `$?` in `Process.run`
+* Lots of bug fixes and small improvements
+
+## 0.7.4 (2015-06-23)
+
+* Added Float module and remainder (thanks @wmoxam)
+* Show elapsed time in HTTP::LogHandler (thanks @zamith for the suggestion)
+* Added `0o` as a prefix for octal numbers (thanks @asb)
+* Allow spaces before the closing tag of a heredoc (thanks @zamith)
+* `String#split(Regex)` now includes captures in the results
+* Added `union?`, `union_types` and `type_params` in macro methods
+* Improved `MatchData#to_s` to show named groups (thanks @will)
+* Optimized Base64 encode/decode (thanks @kostya)
+* Added basic docs for spec (thanks @PragTob)
+* Added docs for Benchmark (thanks @daneb)
+* Added `ARGF`
+* Non-matching regex captures now return `nil` instead of an empty string (thanks @will)
+* Added `$1?`, `$2?`, etc., as a nilable alternative to `$1`, `$2`, etc.
+* Added user, password, fragment and opaque to URI (thanks @will)
+* `HTTP::Client.exec` now honors user/password info from URI
+* Set default user agent in `HTTP::Client`
+* Added `String#chop`
+* Fixed `crystal deps` behaviour with empty git repositories (thanks @tkrajcar)
+* Optimized `HTTP::Headers` and `HTTP::Request` parsing.
+* `FileDescriptorIO` (superclass of `File` and `Socket`) has now buffering capabilities (use `sync=` and `sync?` to turn on/off). That means there's no need to use `BufferedIO` for these classes anymore.
+* Allow `pointerof` with class and global variables, and also `foo.@bar` access
+* Optimized fibers performance.
+* Added inline assembly support.
+* The `.crystal` cache dir is now configurable with an ENV variable (thanks @jhass)
+* Generic type variables names can now also be a single letter followed by a digit.
+
 ## 0.7.3 (2015-06-07)
 
 * Added `Tuple.from_json` and `Tuple.to_json`
