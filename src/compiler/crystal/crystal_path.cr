@@ -1,4 +1,5 @@
 require "./config"
+require "../../file"
 
 module Crystal
   struct CrystalPath

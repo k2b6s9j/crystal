@@ -1,3 +1,5 @@
+require "./buffered_io_mixin"
+
 ifdef windows
   lib LibC
     fun get_osfhandle = _get_osfhandle(fd : Int32) : IntT
@@ -198,8 +200,5 @@ class FileDescriptorIO
 
   def to_fd_io
     self
-=======
-  private def unbuffered_flush
-    # Nothing
   end
 end

@@ -361,7 +361,7 @@ USAGE
     filenames = opt_filenames.not_nil!
     arguments = opt_arguments.not_nil!
 
-    if filenames.length == 0
+    if filenames.size == 0
       puts option_parser
       exit 1
     end

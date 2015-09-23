@@ -63,9 +63,11 @@ module Crystal
       exps.push exp
 
       begin
-        exps << parse_multi_assign
-        skip_statement_end
-      end until is_end_token
+        until is_end_token
+          exps << parse_multi_assign
+          skip_statement_end
+        end
+      end
 
       Expressions.from(exps)
     end

@@ -66,7 +66,7 @@ ifdef darwin || linux
       shift = 0
       while true
         byte = read_uint8
-        result |= ((0x7f_u64 & byte) << shift);
+        #result |= ((0x7f_u64 & byte) << shift);
         break if (byte & 0x80_u8) == 0
         shift += 7
       end
@@ -105,8 +105,8 @@ ifdef darwin || linux
           end
 
           if (actions & LibABI::UA_HANDLER_FRAME) > 0
-            LibABI.unwind_set_gr(context, LibABI::EH_REGISTER_0, LibC::SizeT.cast(exception_object.address))
-            LibABI.unwind_set_gr(context, LibABI::EH_REGISTER_1, LibC::SizeT.cast(exception_object.value.exception_type_id))
+            #LibABI.unwind_set_gr(context, LibABI::EH_REGISTER_0, LibC::SizeT.cast(exception_object.address))
+            #LibABI.unwind_set_gr(context, LibABI::EH_REGISTER_1, LibC::SizeT.cast(exception_object.value.exception_type_id))
             LibABI.unwind_set_ip(context, start + cs_addr)
             # puts "install"
             return LibABI::URC_INSTALL_CONTEXT
